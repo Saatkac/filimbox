@@ -1,66 +1,101 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
-import { movies, categories } from "@/data/movies";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Play, TrendingUp } from "lucide-react";
+import { categories } from "@/data/categories";
 
 const Index = () => {
   const [selectedCategory, setSelectedCategory] = useState("Tümü");
+  const [movies, setMovies] = useState<any[]>([]);
+  const [series, setSeries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  const filteredMovies = selectedCategory === "Tümü" 
-    ? movies 
-    : movies.filter(movie => movie.category === selectedCategory);
+  useEffect(() => {
+    loadContent();
+  }, []);
 
-  const featuredMovie = movies[0];
+  const loadContent = async () => {
+    setLoading(true);
+    const [moviesData, seriesData] = await Promise.all([
+      supabase.from("movies").select("*").order("created_at", { ascending: false }),
+      supabase.from("series").select("*").order("created_at", { ascending: false }),
+    ]);
+    
+    setMovies(moviesData.data || []);
+    setSeries(seriesData.data || []);
+    setLoading(false);
+  };
+
+  const allContent = [...movies, ...series.map(s => ({ ...s, isSeries: true }))];
+  
+  const filteredContent = selectedCategory === "Tümü" 
+    ? allContent 
+    : allContent.filter(item => item.category === selectedCategory);
+
+  const featuredContent = allContent[0];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-cinema-dark">
+        <Navbar />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-gold text-xl">Yükleniyor...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cinema-dark">
       <Navbar />
       
-      {/* Hero Section */}
-      <section className="relative h-[70vh] mt-16">
-        <div className="absolute inset-0">
-          <img
-            src={featuredMovie.backdrop}
-            alt={featuredMovie.title}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-cinema-dark via-cinema-dark/80 to-transparent" />
-        </div>
-        
-        <div className="relative container mx-auto px-4 h-full flex items-center">
-          <div className="max-w-2xl">
-            <div className="flex items-center gap-2 text-gold mb-4">
-              <TrendingUp className="w-5 h-5" />
-              <span className="text-sm font-semibold uppercase">Öne Çıkan</span>
-            </div>
-            <h1 className="text-5xl md:text-7xl font-bold mb-4 gold-glow">
-              {featuredMovie.title}
-            </h1>
-            <p className="text-lg text-muted-foreground mb-6 max-w-xl">
-              {featuredMovie.description}
-            </p>
-            <div className="flex items-center gap-4 mb-8">
-              <span className="px-3 py-1 bg-gold/20 text-gold rounded-full text-sm font-medium">
-                IMDb {featuredMovie.rating}
-              </span>
-              <span className="text-muted-foreground">{featuredMovie.year}</span>
-              <span className="text-muted-foreground">{featuredMovie.duration}</span>
-            </div>
-            <Button 
-              size="lg" 
-              className="bg-gold hover:bg-gold-light text-black font-semibold"
-              onClick={() => window.location.href = `/movie/${featuredMovie.id}`}
-            >
-              <Play className="w-5 h-5 mr-2" />
-              Şimdi İzle
-            </Button>
+      {featuredContent && (
+        <section className="relative h-[70vh] mt-16">
+          <div className="absolute inset-0">
+            <img
+              src={featuredContent.backdrop_url || featuredContent.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=1920&h=1080&fit=crop"}
+              alt={featuredContent.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-cinema-dark via-cinema-dark/80 to-transparent" />
           </div>
-        </div>
-      </section>
+          
+          <div className="relative container mx-auto px-4 h-full flex items-center">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-2 text-gold mb-4">
+                <TrendingUp className="w-5 h-5" />
+                <span className="text-sm font-semibold uppercase">Öne Çıkan</span>
+              </div>
+              <h1 className="text-5xl md:text-7xl font-bold mb-4 gold-glow">
+                {featuredContent.title}
+              </h1>
+              <p className="text-lg text-muted-foreground mb-6 max-w-xl">
+                {featuredContent.description || "Harika bir içerik sizi bekliyor!"}
+              </p>
+              <div className="flex items-center gap-4 mb-8">
+                <span className="px-3 py-1 bg-gold/20 text-gold rounded-full text-sm font-medium">
+                  IMDb {featuredContent.rating}
+                </span>
+                <span className="text-muted-foreground">{featuredContent.year}</span>
+                {featuredContent.duration && (
+                  <span className="text-muted-foreground">{featuredContent.duration}</span>
+                )}
+              </div>
+              <Button 
+                size="lg" 
+                className="bg-gold hover:bg-gold-light text-black font-semibold"
+                onClick={() => window.location.href = `/movie/${featuredContent.id}`}
+              >
+                <Play className="w-5 h-5 mr-2" />
+                Şimdi İzle
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
 
-      {/* Categories */}
       <section className="container mx-auto px-4 py-8">
         <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
           {categories.map((category) => (
@@ -80,24 +115,31 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Movies Grid */}
       <section className="container mx-auto px-4 pb-16">
         <h2 className="text-2xl font-bold mb-6">
-          {selectedCategory === "Tümü" ? "Tüm Filmler" : selectedCategory}
+          {selectedCategory === "Tümü" ? "Tüm İçerikler" : selectedCategory}
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {filteredMovies.map((movie) => (
-            <MovieCard
-              key={movie.id}
-              id={movie.id}
-              title={movie.title}
-              poster={movie.poster}
-              rating={movie.rating}
-              year={movie.year}
-              category={movie.category}
-            />
-          ))}
-        </div>
+        {filteredContent.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {filteredContent.map((item) => (
+              <MovieCard
+                key={item.id}
+                id={item.id}
+                title={item.title}
+                poster={item.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
+                rating={item.rating}
+                year={item.year}
+                category={item.category}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <p className="text-xl text-muted-foreground">
+              Henüz içerik eklenmedi. Admin panelinden içerik ekleyebilirsiniz.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );

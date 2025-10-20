@@ -1,11 +1,14 @@
-import { Search, Film } from "lucide-react";
+import { Search, Film, LogIn, UserCircle, Shield } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 const Navbar = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const { user, isAdmin } = useAuth();
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +45,35 @@ const Navbar = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </form>
+
+          <div className="flex items-center gap-3">
+            {user ? (
+              <>
+                {isAdmin && (
+                  <Button
+                    onClick={() => navigate("/admin")}
+                    variant="secondary"
+                    size="sm"
+                    className="bg-gold hover:bg-gold-light text-black"
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Admin
+                  </Button>
+                )}
+                <UserCircle className="w-6 h-6 text-gold" />
+              </>
+            ) : (
+              <Button
+                onClick={() => navigate("/auth")}
+                variant="secondary"
+                size="sm"
+                className="bg-gold hover:bg-gold-light text-black"
+              >
+                <LogIn className="w-4 h-4 mr-2" />
+                Giriş
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </nav>

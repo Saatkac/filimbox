@@ -1,18 +1,50 @@
+import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
-import { movies } from "@/data/movies";
+import { supabase } from "@/integrations/supabase/client";
 import { Search as SearchIcon } from "lucide-react";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   
-  const searchResults = movies.filter(movie =>
-    movie.title.toLowerCase().includes(query.toLowerCase()) ||
-    movie.description.toLowerCase().includes(query.toLowerCase()) ||
-    movie.category.toLowerCase().includes(query.toLowerCase())
-  );
+  useEffect(() => {
+    searchContent();
+  }, [query]);
+
+  const searchContent = async () => {
+    setLoading(true);
+    
+    const searchQuery = `%${query.toLowerCase()}%`;
+    
+    const [moviesData, seriesData] = await Promise.all([
+      supabase
+        .from("movies")
+        .select("*")
+        .or(`title.ilike.${searchQuery},description.ilike.${searchQuery},category.ilike.${searchQuery}`),
+      supabase
+        .from("series")
+        .select("*")
+        .or(`title.ilike.${searchQuery},description.ilike.${searchQuery},category.ilike.${searchQuery}`),
+    ]);
+    
+    setResults([...(moviesData.data || []), ...(seriesData.data || [])]);
+    setLoading(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-cinema-dark">
+        <Navbar />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-gold text-xl">Aranıyor...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cinema-dark">
@@ -27,28 +59,28 @@ const Search = () => {
             </h1>
           </div>
           <p className="text-muted-foreground">
-            "<span className="text-gold">{query}</span>" için {searchResults.length} sonuç bulundu
+            "<span className="text-gold">{query}</span>" için {results.length} sonuç bulundu
           </p>
         </div>
 
-        {searchResults.length > 0 ? (
+        {results.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {searchResults.map((movie) => (
+            {results.map((item) => (
               <MovieCard
-                key={movie.id}
-                id={movie.id}
-                title={movie.title}
-                poster={movie.poster}
-                rating={movie.rating}
-                year={movie.year}
-                category={movie.category}
+                key={item.id}
+                id={item.id}
+                title={item.title}
+                poster={item.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
+                rating={item.rating}
+                year={item.year}
+                category={item.category}
               />
             ))}
           </div>
         ) : (
           <div className="text-center py-16">
             <p className="text-xl text-muted-foreground">
-              Aramanıza uygun film bulunamadı.
+              Aramanıza uygun içerik bulunamadı.
             </p>
           </div>
         )}
