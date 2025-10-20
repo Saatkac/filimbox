@@ -14,16 +14,182 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      episodes: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          duration: string | null
+          episode_number: number
+          id: string
+          season_number: number
+          series_id: string
+          thumbnail_url: string | null
+          title: string
+          updated_at: string | null
+          video_url: string
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          duration?: string | null
+          episode_number: number
+          id?: string
+          season_number: number
+          series_id: string
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string | null
+          video_url: string
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          duration?: string | null
+          episode_number?: number
+          id?: string
+          season_number?: number
+          series_id?: string
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string | null
+          video_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "episodes_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      movies: {
+        Row: {
+          backdrop_url: string | null
+          category: string
+          created_at: string | null
+          description: string | null
+          duration: string | null
+          id: string
+          poster_url: string | null
+          rating: number | null
+          title: string
+          trailer_url: string | null
+          updated_at: string | null
+          video_url: string
+          year: number | null
+        }
+        Insert: {
+          backdrop_url?: string | null
+          category: string
+          created_at?: string | null
+          description?: string | null
+          duration?: string | null
+          id?: string
+          poster_url?: string | null
+          rating?: number | null
+          title: string
+          trailer_url?: string | null
+          updated_at?: string | null
+          video_url: string
+          year?: number | null
+        }
+        Update: {
+          backdrop_url?: string | null
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          duration?: string | null
+          id?: string
+          poster_url?: string | null
+          rating?: number | null
+          title?: string
+          trailer_url?: string | null
+          updated_at?: string | null
+          video_url?: string
+          year?: number | null
+        }
+        Relationships: []
+      }
+      series: {
+        Row: {
+          backdrop_url: string | null
+          category: string
+          created_at: string | null
+          description: string | null
+          id: string
+          poster_url: string | null
+          rating: number | null
+          title: string
+          trailer_url: string | null
+          updated_at: string | null
+          year: number | null
+        }
+        Insert: {
+          backdrop_url?: string | null
+          category: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          poster_url?: string | null
+          rating?: number | null
+          title: string
+          trailer_url?: string | null
+          updated_at?: string | null
+          year?: number | null
+        }
+        Update: {
+          backdrop_url?: string | null
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          poster_url?: string | null
+          rating?: number | null
+          title?: string
+          trailer_url?: string | null
+          updated_at?: string | null
+          year?: number | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +316,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
