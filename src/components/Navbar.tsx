@@ -1,0 +1,51 @@
+import { Search, Film } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { useState } from "react";
+
+const Navbar = () => {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
+  return (
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-cinema-dark/95 backdrop-blur-md border-b border-border">
+      <div className="container mx-auto px-4 py-4">
+        <div className="flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2 group">
+            <Film className="w-8 h-8 text-gold transition-transform group-hover:scale-110" />
+            <h1 className="text-2xl font-bold text-gold gold-glow">CineVerse</h1>
+          </Link>
+
+          <div className="hidden md:flex items-center gap-8">
+            <Link to="/" className="text-foreground hover:text-gold transition-colors">
+              Ana Sayfa
+            </Link>
+            <Link to="/categories" className="text-foreground hover:text-gold transition-colors">
+              Kategoriler
+            </Link>
+          </div>
+
+          <form onSubmit={handleSearch} className="relative w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Film veya dizi ara..."
+              className="pl-10 bg-secondary border-border focus:border-gold"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </form>
+        </div>
+      </div>
+    </nav>
+  );
+};
+
+export default Navbar;

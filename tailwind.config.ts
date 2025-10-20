@@ -13,7 +13,18 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        poppins: ['Poppins', 'sans-serif'],
+      },
       colors: {
+        gold: {
+          DEFAULT: 'hsl(var(--gold))',
+          light: 'hsl(var(--gold-light))',
+        },
+        cinema: {
+          dark: 'hsl(var(--cinema-dark))',
+          card: 'hsl(var(--cinema-card))',
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
