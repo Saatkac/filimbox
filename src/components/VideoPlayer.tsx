@@ -42,6 +42,12 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
+          xhrSetup: (xhr) => {
+            try {
+              // Credentials kapalı tut, bazı CDN'lerde gerekli
+              xhr.withCredentials = false;
+            } catch {}
+          },
         });
         
         hls.loadSource(normalizedSrc);
@@ -114,6 +120,8 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           poster={poster}
           className="w-full aspect-video"
           controlsList="nodownload"
+          crossOrigin="anonymous"
+          preload="metadata"
         >
           Tarayıcınız video oynatmayı desteklemiyor.
         </video>

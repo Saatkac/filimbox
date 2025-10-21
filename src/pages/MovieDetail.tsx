@@ -170,6 +170,7 @@ const MovieDetail = () => {
         {videoSrc ? (
           <div className="container mx-auto px-4 mb-8">
             <VideoPlayer 
+              key={videoSrc}
               src={videoSrc} 
               poster={content.backdrop_url || content.poster_url} 
             />
