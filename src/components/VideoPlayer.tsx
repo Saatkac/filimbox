@@ -4,6 +4,9 @@ import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
+// Full functions URL is required for HLS libraries
+const FUNCTIONS_URL = "https://riqoyrqxqhhntwovtuwf.functions.supabase.co";
+
 interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -50,7 +53,8 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           },
         });
         
-        hls.loadSource(normalizedSrc);
+const hlsSource = `${FUNCTIONS_URL}/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
+        hls.loadSource(hlsSource);
         hls.attachMedia(video);
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -98,8 +102,9 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         video.src = normalizedSrc;
         video.load();
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        console.log("VideoPlayer: using Safari native HLS");
-        video.src = normalizedSrc;
+        console.log("VideoPlayer: using Safari native HLS via proxy");
+        const proxied = `${FUNCTIONS_URL}/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
+        video.src = proxied;
         video.load();
       } else {
         console.error("VideoPlayer: unsupported format");
