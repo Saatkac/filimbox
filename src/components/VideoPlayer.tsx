@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from "lucide-react";
+import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, Settings } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 
 interface VideoPlayerProps {
@@ -17,6 +26,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -25,6 +35,9 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [qualities, setQualities] = useState<{ level: number; height: number }[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
 
   // Initialize Web Audio API for volume boost
   useEffect(() => {
@@ -53,6 +66,47 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       }
     };
   }, []);
+
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent default only for video player shortcuts
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          skipBackward();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skipForward();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (volume < 6) handleVolumeChange([volume + 0.5]);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (volume > 0) handleVolumeChange([volume - 0.5]);
+          break;
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'm':
+          e.preventDefault();
+          toggleMute();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPlaying, volume, isFullscreen, isMuted]);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -102,11 +156,23 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           },
         });
         
+        hlsRef.current = hls;
         hls.loadSource(normalizedSrc);
         hls.attachMedia(video);
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           console.log("VideoPlayer: HLS manifest parsed successfully");
+          // Get available quality levels
+          const levels = hls.levels.map((level, index) => ({
+            level: index,
+            height: level.height
+          }));
+          setQualities(levels);
+          setCurrentQuality(hls.currentLevel);
+        });
+        
+        hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+          setCurrentQuality(data.level);
         });
         
         hls.on(Hls.Events.ERROR, (event, data) => {
@@ -135,6 +201,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           video.removeEventListener('play', handlePlay);
           video.removeEventListener('pause', handlePause);
           hls.destroy();
+          hlsRef.current = null;
         };
       } else if (isDASH) {
         console.log("VideoPlayer: using DASH.js");
@@ -186,6 +253,32 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       } else {
         videoRef.current.play();
       }
+    }
+  };
+
+  const skipForward = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, duration);
+    }
+  };
+
+  const skipBackward = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
+    }
+  };
+
+  const changePlaybackRate = (rate: number) => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = rate;
+      setPlaybackRate(rate);
+    }
+  };
+
+  const changeQuality = (level: number) => {
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = level;
+      setCurrentQuality(level);
     }
   };
 
@@ -249,9 +342,10 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   return (
     <div 
       ref={containerRef}
-      className="relative w-full bg-black rounded-lg overflow-hidden group"
+      className="relative w-full bg-black rounded-lg overflow-hidden group aspect-video"
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
+      onTouchStart={() => setShowControls(true)}
     >
       {error ? (
         <Alert variant="destructive" className="m-4">
@@ -263,7 +357,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           <video
             ref={videoRef}
             poster={poster}
-            className="w-full aspect-video"
+            className="w-full h-full max-h-[100vh] object-contain"
             crossOrigin="anonymous"
             preload="metadata"
             onClick={togglePlay}
@@ -311,42 +405,127 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
               </div>
 
               {/* Controls Row */}
-              <div className="flex items-center justify-between gap-4">
-                {/* Volume Control */}
-                <div className="flex items-center gap-2 flex-1 max-w-[200px]">
+              <div className="flex items-center justify-between gap-2 md:gap-4">
+                {/* Left Side Controls */}
+                <div className="flex items-center gap-2 md:gap-3">
+                  {/* Skip Buttons */}
                   <button
-                    onClick={toggleMute}
+                    onClick={skipBackward}
                     className="text-white hover:text-gold transition-colors"
+                    title="10 saniye geri (Sol ok)"
                   >
-                    {isMuted || volume === 0 ? (
-                      <VolumeX className="w-5 h-5 md:w-6 md:h-6" />
-                    ) : (
-                      <Volume2 className="w-5 h-5 md:w-6 md:h-6" />
-                    )}
+                    <SkipBack className="w-5 h-5 md:w-6 md:h-6" />
                   </button>
-                  <Slider
-                    value={[volume]}
-                    max={6}
-                    step={0.1}
-                    onValueChange={handleVolumeChange}
-                    className="flex-1"
-                  />
-                  <span className="text-white text-xs md:text-sm font-medium min-w-[50px]">
-                    {Math.round(volume * 100)}%
-                  </span>
+                  <button
+                    onClick={skipForward}
+                    className="text-white hover:text-gold transition-colors"
+                    title="10 saniye ileri (Sağ ok)"
+                  >
+                    <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+
+                  {/* Volume Control */}
+                  <div className="hidden sm:flex items-center gap-2 max-w-[150px] lg:max-w-[200px]">
+                    <button
+                      onClick={toggleMute}
+                      className="text-white hover:text-gold transition-colors"
+                      title="Sesi aç/kapat (M)"
+                    >
+                      {isMuted || volume === 0 ? (
+                        <VolumeX className="w-5 h-5 md:w-6 md:h-6" />
+                      ) : (
+                        <Volume2 className="w-5 h-5 md:w-6 md:h-6" />
+                      )}
+                    </button>
+                    <Slider
+                      value={[volume]}
+                      max={6}
+                      step={0.1}
+                      onValueChange={handleVolumeChange}
+                      className="flex-1"
+                    />
+                    <span className="text-white text-xs font-medium min-w-[40px]">
+                      {Math.round(volume * 100)}%
+                    </span>
+                  </div>
                 </div>
 
-                {/* Fullscreen Toggle */}
-                <button
-                  onClick={toggleFullscreen}
-                  className="text-white hover:text-gold transition-colors"
-                >
-                  {isFullscreen ? (
-                    <Minimize className="w-5 h-5 md:w-6 md:h-6" />
-                  ) : (
-                    <Maximize className="w-5 h-5 md:w-6 md:h-6" />
+                {/* Right Side Controls */}
+                <div className="flex items-center gap-2 md:gap-3">
+                  {/* Playback Speed */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="text-white hover:text-gold hover:bg-white/10 h-8 px-2 text-xs md:text-sm"
+                      >
+                        {playbackRate}x
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="bg-black/95 border-gold/20">
+                      <DropdownMenuLabel className="text-gold">Oynatma Hızı</DropdownMenuLabel>
+                      <DropdownMenuSeparator className="bg-gold/20" />
+                      {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                        <DropdownMenuItem
+                          key={rate}
+                          onClick={() => changePlaybackRate(rate)}
+                          className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
+                        >
+                          {rate === playbackRate && "✓ "}{rate}x
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Quality Selection */}
+                  {qualities.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-white hover:text-gold hover:bg-white/10 h-8 px-2"
+                          title="Kalite"
+                        >
+                          <Settings className="w-4 h-4 md:w-5 md:h-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-black/95 border-gold/20">
+                        <DropdownMenuLabel className="text-gold">Video Kalitesi</DropdownMenuLabel>
+                        <DropdownMenuSeparator className="bg-gold/20" />
+                        <DropdownMenuItem
+                          onClick={() => changeQuality(-1)}
+                          className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
+                        >
+                          {currentQuality === -1 && "✓ "}Otomatik
+                        </DropdownMenuItem>
+                        {qualities.map((quality) => (
+                          <DropdownMenuItem
+                            key={quality.level}
+                            onClick={() => changeQuality(quality.level)}
+                            className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
+                          >
+                            {currentQuality === quality.level && "✓ "}{quality.height}p
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
-                </button>
+
+                  {/* Fullscreen Toggle */}
+                  <button
+                    onClick={toggleFullscreen}
+                    className="text-white hover:text-gold transition-colors"
+                    title="Tam ekran (F)"
+                  >
+                    {isFullscreen ? (
+                      <Minimize className="w-5 h-5 md:w-6 md:h-6" />
+                    ) : (
+                      <Maximize className="w-5 h-5 md:w-6 md:h-6" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
