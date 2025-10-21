@@ -13,16 +13,25 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const normalizeUrl = (u: string) => {
+    if (!u) return u;
+    let out = u.trim();
+    if (/^ttps?:\/\//i.test(out)) out = 'h' + out; // fix missing 'h' in protocol
+    if (/^\/\//.test(out)) out = 'https:' + out;   // protocol-relative -> https
+    return out;
+  };
+
   useEffect(() => {
     if (!videoRef.current || !src) return;
 
     const video = videoRef.current;
+    const normalizedSrc = normalizeUrl(src);
     setError(null);
 
     // Determine the video format
-    const isHLS = src.includes(".m3u8") || src.includes(".m3u");
-    const isDASH = src.includes(".mpd");
-    const isMP4 = src.includes(".mp4");
+    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
+    const isDASH = /\.mpd(\?|$)/i.test(normalizedSrc);
+    const isMP4 = /\.mp4(\?|$)/i.test(normalizedSrc);
 
     try {
       if (isHLS && Hls.isSupported()) {
@@ -32,7 +41,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           lowLatencyMode: true,
         });
         
-        hls.loadSource(src);
+        hls.loadSource(normalizedSrc);
         hls.attachMedia(video);
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -52,7 +61,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       } else if (isDASH) {
         // DASH.js for .mpd streams
         const player = dashjs.MediaPlayer().create();
-        player.initialize(video, src, true);
+        player.initialize(video, normalizedSrc, true);
         
         player.on('error', (e: any) => {
           setError("Video yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.");
@@ -64,7 +73,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         };
       } else if (isMP4 || video.canPlayType('application/vnd.apple.mpegurl')) {
         // Native support for MP4 or Safari HLS
-        video.src = src;
+        video.src = normalizedSrc;
         video.load();
       } else {
         setError("Bu video formatı desteklenmiyor.");

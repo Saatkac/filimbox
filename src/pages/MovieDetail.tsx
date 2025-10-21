@@ -256,6 +256,12 @@ const MovieDetail = () => {
                   </div>
                 </div>
               )}
+              {!isMovie && episodes.length === 0 && (
+                <div className="mt-8">
+                  <h2 className="text-2xl font-bold mb-2">Bölümler</h2>
+                  <p className="text-muted-foreground">Bu dizi için henüz bölüm eklenmedi.</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
