@@ -4,8 +4,6 @@ import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-const FUNCTIONS_URL = "https://riqoyrqxqhhntwovtuwf.functions.supabase.co";
-
 interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -18,11 +16,11 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const normalizeUrl = (u: string) => {
     if (!u) return u;
     let out = u.trim();
-    // Decode common HTML entities and strip quotes
-    out = out.replace(/&amp;/g, '&').replace(/^"|"$/g, '');
-    // Fix missing protocol variants
-    if (/^ttps?:\/\//i.test(out)) out = 'h' + out; // fix missing 'h' in protocol
-    if (/^\/\//.test(out)) out = 'https:' + out;   // protocol-relative -> https
+    // Decode HTML entities
+    out = out.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    // Fix missing protocol
+    if (/^ttps?:\/\//i.test(out)) out = 'h' + out;
+    if (/^\/\//.test(out)) out = 'https:' + out;
     return out;
   };
 
@@ -33,46 +31,46 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     const normalizedSrc = normalizeUrl(src);
     setError(null);
 
-    // Determine the video format
+    console.log("VideoPlayer: attempting to load", normalizedSrc);
+
+    // Determine format
     const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
     const isDASH = /\.mpd(\?|$)/i.test(normalizedSrc);
     const isMP4 = /\.mp4(\?|$)/i.test(normalizedSrc);
 
     try {
       if (isHLS && Hls.isSupported()) {
-        // HLS.js for .m3u8 streams
+        console.log("VideoPlayer: using HLS.js");
         const hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: true,
-          xhrSetup: (xhr) => {
-            try {
-              // Credentials kapalı tut, bazı CDN'lerde gerekli
-              xhr.withCredentials = false;
-            } catch {}
+          lowLatencyMode: false,
+          backBufferLength: 90,
+          xhrSetup: (xhr, url) => {
+            xhr.withCredentials = false;
           },
         });
-        const hlsSource = `${FUNCTIONS_URL}/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
-        hls.loadSource(hlsSource);
+        
+        hls.loadSource(normalizedSrc);
         hls.attachMedia(video);
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log("HLS manifest loaded");
+          console.log("VideoPlayer: HLS manifest parsed successfully");
         });
         
         hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error("HLS Error:", data);
+          console.error("VideoPlayer: HLS error", data);
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                // Try to recover network error
-                try { hls.startLoad(); } catch {}
+                console.log("VideoPlayer: fatal network error, trying to recover");
+                hls.startLoad();
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
-                // Try to recover media error
-                try { hls.recoverMediaError(); } catch {}
+                console.log("VideoPlayer: fatal media error, trying to recover");
+                hls.recoverMediaError();
                 break;
               default:
-                setError("Video yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.");
+                setError("Video yüklenemedi. Lütfen daha sonra tekrar deneyin.");
                 hls.destroy();
                 break;
             }
@@ -83,33 +81,33 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           hls.destroy();
         };
       } else if (isDASH) {
-        // DASH.js for .mpd streams
+        console.log("VideoPlayer: using DASH.js");
         const player = dashjs.MediaPlayer().create();
         player.initialize(video, normalizedSrc, true);
         
         player.on('error', (e: any) => {
-          setError("Video yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.");
-          console.error("DASH Error:", e);
+          console.error("VideoPlayer: DASH error", e);
+          setError("Video yüklenemedi. Lütfen daha sonra tekrar deneyin.");
         });
 
         return () => {
           player.destroy();
         };
       } else if (isMP4) {
-        // Native MP4
+        console.log("VideoPlayer: using native MP4");
         video.src = normalizedSrc;
         video.load();
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Safari native HLS with proxy to avoid CORS
-        const proxiedSrc = `${FUNCTIONS_URL}/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
-        video.src = proxiedSrc;
+        console.log("VideoPlayer: using Safari native HLS");
+        video.src = normalizedSrc;
         video.load();
       } else {
+        console.error("VideoPlayer: unsupported format");
         setError("Bu video formatı desteklenmiyor.");
       }
     } catch (err) {
-      setError("Video oynatıcı başlatılırken bir hata oluştu.");
-      console.error("Video Player Error:", err);
+      console.error("VideoPlayer: initialization error", err);
+      setError("Video oynatıcı başlatılamadı.");
     }
   }, [src]);
 
