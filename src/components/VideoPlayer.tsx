@@ -49,8 +49,8 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
             } catch {}
           },
         });
-        
-        hls.loadSource(normalizedSrc);
+        const hlsSource = `/functions/v1/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
+        hls.loadSource(hlsSource);
         hls.attachMedia(video);
         
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -93,9 +93,14 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         return () => {
           player.destroy();
         };
-      } else if (isMP4 || video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native support for MP4 or Safari HLS
+      } else if (isMP4) {
+        // Native MP4
         video.src = normalizedSrc;
+        video.load();
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Safari native HLS with proxy to avoid CORS
+        const proxiedSrc = `/functions/v1/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
+        video.src = proxiedSrc;
         video.load();
       } else {
         setError("Bu video formatı desteklenmiyor.");
