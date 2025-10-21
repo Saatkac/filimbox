@@ -36,65 +36,92 @@ const MovieDetail = () => {
 
   const loadContent = async () => {
     setLoading(true);
-    
-    // Try to load as movie first
-    let { data: movieData } = await supabase
-      .from("movies")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-    
-    if (movieData) {
-      setContent(movieData);
-      setIsMovie(true);
-    } else {
-      // If not found, try series
-      const { data: seriesData } = await supabase
-        .from("series")
+
+    try {
+      console.log("MovieDetail: loading content", { id });
+
+      // Try to load as movie first
+      const { data: movieData } = await supabase
+        .from("movies")
         .select("*")
         .eq("id", id)
         .maybeSingle();
-      
-      if (seriesData) {
-        setContent(seriesData);
-        setIsMovie(false);
-        
-        // Fetch episodes for the series
-        const { data: episodesData } = await supabase
-          .from("episodes")
-          .select("*")
-          .eq("series_id", id)
-          .order("season_number", { ascending: true })
-          .order("episode_number", { ascending: true });
 
-        if (episodesData && episodesData.length > 0) {
-          setEpisodes(episodesData);
-          setSelectedEpisode(episodesData[0]);
+      let currentCategory: string | null = null;
+
+      if (movieData) {
+        console.log("MovieDetail: movie found", movieData);
+        setContent(movieData);
+        setIsMovie(true);
+        setEpisodes([]);
+        setSelectedEpisode(null);
+        currentCategory = movieData.category ?? null;
+      } else {
+        // If not found, try series
+        const { data: seriesData } = await supabase
+          .from("series")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (seriesData) {
+          console.log("MovieDetail: series found", seriesData);
+          setContent(seriesData);
+          setIsMovie(false);
+          currentCategory = seriesData.category ?? null;
+
+          // Fetch episodes for the series
+          const { data: episodesData, error: episodesErr } = await supabase
+            .from("episodes")
+            .select("*")
+            .eq("series_id", seriesData.id)
+            .order("season_number", { ascending: true })
+            .order("episode_number", { ascending: true });
+
+          if (episodesErr) {
+            console.error("MovieDetail: episodes fetch error", episodesErr);
+          }
+
+          console.log("MovieDetail: episodes loaded", episodesData?.length || 0);
+
+          if (episodesData && episodesData.length > 0) {
+            setEpisodes(episodesData);
+            setSelectedEpisode(episodesData[0] ?? null);
+          } else {
+            setEpisodes([]);
+            setSelectedEpisode(null);
+          }
+        } else {
+          console.warn("MovieDetail: no content found for id", id);
         }
       }
+
+      // Load similar content (based on category when available)
+      if (currentCategory) {
+        const [{ data: moviesData }, { data: seriesData }] = await Promise.all([
+          supabase
+            .from("movies")
+            .select("*")
+            .eq("category", currentCategory)
+            .neq("id", id)
+            .limit(4),
+          supabase
+            .from("series")
+            .select("*")
+            .eq("category", currentCategory)
+            .neq("id", id)
+            .limit(4),
+        ]);
+
+        setSimilarContent([...(moviesData || []), ...(seriesData || [])].slice(0, 4));
+      } else {
+        setSimilarContent([]);
+      }
+    } catch (e) {
+      console.error("MovieDetail: loadContent fatal error", e);
+    } finally {
+      setLoading(false);
     }
-    
-    if (movieData || content) {
-      const currentContent = movieData || content;
-      // Load similar content
-      const { data: moviesData } = await supabase
-        .from("movies")
-        .select("*")
-        .eq("category", currentContent.category)
-        .neq("id", id)
-        .limit(4);
-      
-      const { data: seriesData } = await supabase
-        .from("series")
-        .select("*")
-        .eq("category", currentContent.category)
-        .neq("id", id)
-        .limit(4);
-      
-      setSimilarContent([...(moviesData || []), ...(seriesData || [])].slice(0, 4));
-    }
-    
-    setLoading(false);
   };
 
   if (loading) {

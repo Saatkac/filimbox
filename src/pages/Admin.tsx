@@ -58,7 +58,8 @@ const Admin = () => {
 
   const handleAddMovie = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const videoRaw = (formData.get("video_url") as string) || "";
+    const safeVideoUrl = videoRaw.replaceAll("&amp;", "&").trim();
     
     const { error } = await supabase.from("movies").insert({
       title: formData.get("title") as string,
@@ -69,7 +70,7 @@ const Admin = () => {
       year: parseInt(formData.get("year") as string),
       category: formData.get("category") as string,
       duration: formData.get("duration") as string,
-      video_url: formData.get("video_url") as string,
+      video_url: safeVideoUrl,
       trailer_url: formData.get("trailer_url") as string,
     });
 
@@ -109,6 +110,8 @@ const Admin = () => {
   const handleAddEpisode = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    const videoRaw = (formData.get("video_url") as string) || "";
+    const safeVideoUrl = videoRaw.replaceAll("&amp;", "&").trim();
     
     const { error } = await supabase.from("episodes").insert({
       series_id: selectedSeries,
@@ -116,7 +119,7 @@ const Admin = () => {
       description: formData.get("description") as string,
       episode_number: parseInt(formData.get("episode_number") as string),
       season_number: parseInt(formData.get("season_number") as string),
-      video_url: formData.get("video_url") as string,
+      video_url: safeVideoUrl,
       duration: formData.get("duration") as string,
       thumbnail_url: formData.get("thumbnail_url") as string,
     });

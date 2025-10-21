@@ -16,6 +16,9 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const normalizeUrl = (u: string) => {
     if (!u) return u;
     let out = u.trim();
+    // Decode common HTML entities and strip quotes
+    out = out.replace(/&amp;/g, '&').replace(/^"|"$/g, '');
+    // Fix missing protocol variants
     if (/^ttps?:\/\//i.test(out)) out = 'h' + out; // fix missing 'h' in protocol
     if (/^\/\//.test(out)) out = 'https:' + out;   // protocol-relative -> https
     return out;
@@ -49,9 +52,22 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         });
         
         hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error("HLS Error:", data);
           if (data.fatal) {
-            setError("Video yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.");
-            console.error("HLS Error:", data);
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                // Try to recover network error
+                try { hls.startLoad(); } catch {}
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                // Try to recover media error
+                try { hls.recoverMediaError(); } catch {}
+                break;
+              default:
+                setError("Video yüklenirken bir hata oluştu. Lütfen daha sonra tekrar deneyin.");
+                hls.destroy();
+                break;
+            }
           }
         });
 
