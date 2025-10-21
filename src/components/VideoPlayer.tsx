@@ -4,6 +4,8 @@ import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
+const FUNCTIONS_URL = "https://riqoyrqxqhhntwovtuwf.functions.supabase.co";
+
 interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -49,7 +51,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
             } catch {}
           },
         });
-        const hlsSource = `/functions/v1/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
+        const hlsSource = `${FUNCTIONS_URL}/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
         hls.loadSource(hlsSource);
         hls.attachMedia(video);
         
@@ -99,7 +101,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         video.load();
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         // Safari native HLS with proxy to avoid CORS
-        const proxiedSrc = `/functions/v1/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
+        const proxiedSrc = `${FUNCTIONS_URL}/hls-proxy?url=${encodeURIComponent(normalizedSrc)}`;
         video.src = proxiedSrc;
         video.load();
       } else {
