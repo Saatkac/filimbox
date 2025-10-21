@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -66,47 +66,6 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       }
     };
   }, []);
-
-  // Keyboard controls
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent default only for video player shortcuts
-      switch (e.key) {
-        case ' ':
-        case 'k':
-          e.preventDefault();
-          togglePlay();
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          skipBackward();
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          skipForward();
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          if (volume < 6) handleVolumeChange([volume + 0.5]);
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          if (volume > 0) handleVolumeChange([volume - 0.5]);
-          break;
-        case 'f':
-          e.preventDefault();
-          toggleFullscreen();
-          break;
-        case 'm':
-          e.preventDefault();
-          toggleMute();
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, volume, isFullscreen, isMuted]);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -245,8 +204,8 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     };
   }, [src]);
 
-  // Control functions
-  const togglePlay = () => {
+  // Control functions with useCallback
+  const togglePlay = useCallback(() => {
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
@@ -254,42 +213,42 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         videoRef.current.play();
       }
     }
-  };
+  }, [isPlaying]);
 
-  const skipForward = () => {
+  const skipForward = useCallback(() => {
     if (videoRef.current) {
       videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, duration);
     }
-  };
+  }, [duration]);
 
-  const skipBackward = () => {
+  const skipBackward = useCallback(() => {
     if (videoRef.current) {
       videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
     }
-  };
+  }, []);
 
-  const changePlaybackRate = (rate: number) => {
+  const changePlaybackRate = useCallback((rate: number) => {
     if (videoRef.current) {
       videoRef.current.playbackRate = rate;
       setPlaybackRate(rate);
     }
-  };
+  }, []);
 
-  const changeQuality = (level: number) => {
+  const changeQuality = useCallback((level: number) => {
     if (hlsRef.current) {
       hlsRef.current.currentLevel = level;
       setCurrentQuality(level);
     }
-  };
+  }, []);
 
-  const handleSeek = (value: number[]) => {
+  const handleSeek = useCallback((value: number[]) => {
     if (videoRef.current) {
       videoRef.current.currentTime = value[0];
       setCurrentTime(value[0]);
     }
-  };
+  }, []);
 
-  const handleVolumeChange = (value: number[]) => {
+  const handleVolumeChange = useCallback((value: number[]) => {
     if (videoRef.current) {
       const newVolume = value[0];
       setVolume(newVolume);
@@ -303,17 +262,17 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       videoRef.current.volume = 1;
       setIsMuted(false);
     }
-  };
+  }, []);
 
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (videoRef.current) {
       const newMuted = !isMuted;
       setIsMuted(newMuted);
       videoRef.current.muted = newMuted;
     }
-  };
+  }, [isMuted]);
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
     
     if (!isFullscreen) {
@@ -326,7 +285,48 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       }
     }
     setIsFullscreen(!isFullscreen);
-  };
+  }, [isFullscreen]);
+
+  // Keyboard controls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent default only for video player shortcuts
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          skipBackward();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skipForward();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (volume < 6) handleVolumeChange([volume + 0.5]);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (volume > 0) handleVolumeChange([volume - 0.5]);
+          break;
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'm':
+          e.preventDefault();
+          toggleMute();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, skipBackward, skipForward, handleVolumeChange, toggleFullscreen, toggleMute, volume]);
 
   const formatTime = (time: number) => {
     const hours = Math.floor(time / 3600);
