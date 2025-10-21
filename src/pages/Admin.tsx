@@ -58,8 +58,9 @@ const Admin = () => {
 
   const handleAddMovie = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const formData = new FormData(e.currentTarget);
     const videoRaw = (formData.get("video_url") as string) || "";
-    const safeVideoUrl = videoRaw.replaceAll("&amp;", "&").trim();
+    const safeVideoUrl = videoRaw.replace(/&amp;/g, "&").trim();
     
     const { error } = await supabase.from("movies").insert({
       title: formData.get("title") as string,
@@ -111,7 +112,7 @@ const Admin = () => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const videoRaw = (formData.get("video_url") as string) || "";
-    const safeVideoUrl = videoRaw.replaceAll("&amp;", "&").trim();
+    const safeVideoUrl = videoRaw.replace(/&amp;/g, "&").trim();
     
     const { error } = await supabase.from("episodes").insert({
       series_id: selectedSeries,
