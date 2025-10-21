@@ -23,7 +23,7 @@ const Navbar = () => {
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 group">
             <Film className="w-8 h-8 text-gold transition-transform group-hover:scale-110" />
-            <h1 className="text-2xl font-bold text-gold gold-glow">CineVerse</h1>
+            <h1 className="text-2xl font-bold text-gold gold-glow">FilimBox</h1>
           </Link>
 
           <div className="hidden md:flex items-center gap-8">

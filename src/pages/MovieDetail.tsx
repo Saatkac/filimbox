@@ -5,21 +5,36 @@ import VideoPlayer from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Star, Clock, Calendar, ArrowLeft } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Star, Clock, Calendar, ArrowLeft, Play } from "lucide-react";
+
+interface Episode {
+  id: string;
+  title: string;
+  episode_number: number;
+  season_number: number;
+  description: string | null;
+  duration: string | null;
+  thumbnail_url: string | null;
+  video_url: string;
+}
 
 const MovieDetail = () => {
   const { id } = useParams();
-  const [movie, setMovie] = useState<any>(null);
+  const [content, setContent] = useState<any>(null);
+  const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   const [similarContent, setSimilarContent] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isMovie, setIsMovie] = useState(false);
   
   useEffect(() => {
     if (id) {
-      loadMovie();
+      loadContent();
     }
   }, [id]);
 
-  const loadMovie = async () => {
+  const loadContent = async () => {
     setLoading(true);
     
     // Try to load as movie first
@@ -29,32 +44,50 @@ const MovieDetail = () => {
       .eq("id", id)
       .maybeSingle();
     
-    // If not found, try series
-    if (!movieData) {
+    if (movieData) {
+      setContent(movieData);
+      setIsMovie(true);
+    } else {
+      // If not found, try series
       const { data: seriesData } = await supabase
         .from("series")
         .select("*")
         .eq("id", id)
         .maybeSingle();
       
-      movieData = seriesData;
+      if (seriesData) {
+        setContent(seriesData);
+        setIsMovie(false);
+        
+        // Fetch episodes for the series
+        const { data: episodesData } = await supabase
+          .from("episodes")
+          .select("*")
+          .eq("series_id", id)
+          .order("season_number", { ascending: true })
+          .order("episode_number", { ascending: true });
+
+        if (episodesData && episodesData.length > 0) {
+          setEpisodes(episodesData);
+          setSelectedEpisode(episodesData[0]);
+        }
+      }
     }
     
-    setMovie(movieData);
-    
-    if (movieData) {
+    if (movieData || content) {
+      const currentContent = movieData || content;
       // Load similar content
       const { data: moviesData } = await supabase
         .from("movies")
         .select("*")
-        .eq("category", movieData.category)
+        .eq("category", currentContent.category)
         .neq("id", id)
         .limit(4);
       
       const { data: seriesData } = await supabase
         .from("series")
         .select("*")
-        .eq("category", movieData.category)
+        .eq("category", currentContent.category)
         .neq("id", id)
         .limit(4);
       
@@ -75,7 +108,7 @@ const MovieDetail = () => {
     );
   }
 
-  if (!movie) {
+  if (!content) {
     return (
       <div className="min-h-screen bg-cinema-dark">
         <Navbar />
@@ -91,6 +124,8 @@ const MovieDetail = () => {
     );
   }
 
+  const videoSrc = isMovie ? content.video_url : selectedEpisode?.video_url;
+
   return (
     <div className="min-h-screen bg-cinema-dark">
       <Navbar />
@@ -105,16 +140,20 @@ const MovieDetail = () => {
           </Link>
         </div>
 
-        {movie.video_url ? (
+        {videoSrc ? (
           <div className="container mx-auto px-4 mb-8">
             <VideoPlayer 
-              src={movie.video_url} 
-              poster={movie.backdrop_url || movie.poster_url} 
+              src={videoSrc} 
+              poster={content.backdrop_url || content.poster_url} 
             />
           </div>
         ) : (
           <div className="container mx-auto px-4 mb-8 text-center py-8 bg-card rounded-lg">
-            <p className="text-muted-foreground">Bu içerik için video henüz eklenmedi</p>
+            <p className="text-muted-foreground">
+              {isMovie 
+                ? "Bu film için video henüz eklenmedi" 
+                : "Bu dizi için henüz bölüm eklenmedi"}
+            </p>
           </div>
         )}
 
@@ -122,49 +161,99 @@ const MovieDetail = () => {
           <div className="flex flex-col md:flex-row gap-8">
             <div className="md:w-1/3">
               <img
-                src={movie.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
-                alt={movie.title}
+                src={content.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
+                alt={content.title}
                 className="w-full rounded-lg shadow-2xl"
               />
             </div>
             
             <div className="md:w-2/3">
               <h1 className="text-4xl md:text-5xl font-bold mb-4 gold-glow">
-                {movie.title}
+                {content.title}
               </h1>
               
               <div className="flex flex-wrap items-center gap-4 mb-6">
                 <div className="flex items-center gap-2 px-4 py-2 bg-card rounded-lg">
                   <Star className="w-5 h-5 fill-gold text-gold" />
-                  <span className="text-lg font-semibold">{movie.rating}</span>
+                  <span className="text-lg font-semibold">{content.rating || 'N/A'}</span>
                   <span className="text-muted-foreground">IMDb</span>
                 </div>
                 
-                {movie.year && (
+                {content.year && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Calendar className="w-4 h-4" />
-                    <span>{movie.year}</span>
+                    <span>{content.year}</span>
                   </div>
                 )}
                 
-                {movie.duration && (
+                {isMovie && content.duration && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Clock className="w-4 h-4" />
-                    <span>{movie.duration}</span>
+                    <span>{content.duration}</span>
                   </div>
                 )}
                 
                 <span className="px-3 py-1 bg-gold/20 text-gold rounded-full text-sm font-medium">
-                  {movie.category}
+                  {content.category}
                 </span>
               </div>
               
-              {movie.description && (
+              {content.description && (
                 <div className="mb-8">
                   <h2 className="text-xl font-semibold mb-3">Hikaye</h2>
                   <p className="text-muted-foreground leading-relaxed">
-                    {movie.description}
+                    {content.description}
                   </p>
+                </div>
+              )}
+
+              {/* Episodes List for Series */}
+              {!isMovie && episodes.length > 0 && (
+                <div className="mt-8">
+                  <h2 className="text-2xl font-bold mb-4">Bölümler</h2>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {episodes.map((episode) => (
+                      <div
+                        key={episode.id}
+                        onClick={() => setSelectedEpisode(episode)}
+                        className={`p-4 rounded-lg cursor-pointer transition-all ${
+                          selectedEpisode?.id === episode.id
+                            ? 'bg-gold/20 border-2 border-gold'
+                            : 'bg-card hover:bg-card/80 border-2 border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-start gap-4">
+                          {episode.thumbnail_url && (
+                            <img
+                              src={episode.thumbnail_url}
+                              alt={episode.title}
+                              className="w-32 h-20 object-cover rounded"
+                            />
+                          )}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant="outline" className="text-xs">
+                                S{episode.season_number}E{episode.episode_number}
+                              </Badge>
+                              {episode.duration && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {episode.duration}
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="font-semibold mb-1">{episode.title}</h3>
+                            {episode.description && (
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {episode.description}
+                              </p>
+                            )}
+                          </div>
+                          <Play className="w-5 h-5 text-gold flex-shrink-0" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
