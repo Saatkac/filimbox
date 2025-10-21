@@ -151,7 +151,10 @@ const MovieDetail = () => {
     );
   }
 
-  const videoSrc = isMovie ? content.video_url : selectedEpisode?.video_url;
+// Determine video source based on content type, avoid false "no video" flash for series
+const videoSrc = isMovie
+  ? content.video_url
+  : (selectedEpisode?.video_url || (episodes.length > 0 ? episodes[0]?.video_url : undefined));
 
   return (
     <div className="min-h-screen bg-cinema-dark">
@@ -167,21 +170,35 @@ const MovieDetail = () => {
           </Link>
         </div>
 
-        {videoSrc ? (
+        {isMovie ? (
+          content.video_url ? (
+            <div className="container mx-auto px-4 mb-8">
+              <VideoPlayer
+                key={content.video_url}
+                src={content.video_url}
+                poster={content.backdrop_url || content.poster_url}
+              />
+            </div>
+          ) : (
+            <div className="container mx-auto px-4 mb-8 text-center py-8 bg-card rounded-lg">
+              <p className="text-muted-foreground">Bu film için video henüz eklenmedi</p>
+            </div>
+          )
+        ) : episodes.length === 0 ? (
+          <div className="container mx-auto px-4 mb-8 text-center py-8 bg-card rounded-lg">
+            <p className="text-muted-foreground">Bu dizi için henüz bölüm eklenmedi</p>
+          </div>
+        ) : videoSrc ? (
           <div className="container mx-auto px-4 mb-8">
-            <VideoPlayer 
+            <VideoPlayer
               key={videoSrc}
-              src={videoSrc} 
-              poster={content.backdrop_url || content.poster_url} 
+              src={videoSrc}
+              poster={content.backdrop_url || content.poster_url}
             />
           </div>
         ) : (
           <div className="container mx-auto px-4 mb-8 text-center py-8 bg-card rounded-lg">
-            <p className="text-muted-foreground">
-              {isMovie 
-                ? "Bu film için video henüz eklenmedi" 
-                : "Bu dizi için henüz bölüm eklenmedi"}
-            </p>
+            <p className="text-muted-foreground">Bölüm yükleniyor...</p>
           </div>
         )}
 
