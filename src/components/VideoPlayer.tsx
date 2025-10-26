@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipBack, SkipForward, Settings } from "lucide-react";
+import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,17 +78,16 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          maxBufferSize: 60 * 1000 * 1000,
-          maxBufferHole: 0.5,
-          highBufferWatchdogPeriod: 2,
-          nudgeOffset: 0.1,
-          nudgeMaxRetry: 3,
-          maxFragLookUpTolerance: 0.25,
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 10,
-          liveDurationInfinity: false,
+          maxBufferLength: 20,
+          maxMaxBufferLength: 30,
+          maxBufferSize: 30 * 1000 * 1000,
+          maxBufferHole: 0.3,
+          highBufferWatchdogPeriod: 1,
+          nudgeOffset: 0.05,
+          nudgeMaxRetry: 2,
+          maxFragLookUpTolerance: 0.2,
+          startLevel: -1,
+          autoStartLoad: true,
           xhrSetup: (xhr, url) => {
             xhr.withCredentials = false;
           },
@@ -194,18 +193,6 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     }
   }, [isPlaying]);
 
-  const skipForward = useCallback(() => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, duration);
-    }
-  }, [duration]);
-
-  const skipBackward = useCallback(() => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
-    }
-  }, []);
-
   const changePlaybackRate = useCallback((rate: number) => {
     if (videoRef.current) {
       videoRef.current.playbackRate = rate;
@@ -274,14 +261,6 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           e.preventDefault();
           togglePlay();
           break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          skipBackward();
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          skipForward();
-          break;
         case 'ArrowUp':
           e.preventDefault();
           if (volume < 2) handleVolumeChange([Math.min(volume + 0.1, 2)]);
@@ -303,7 +282,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, skipBackward, skipForward, handleVolumeChange, toggleFullscreen, toggleMute, volume]);
+  }, [togglePlay, handleVolumeChange, toggleFullscreen, toggleMute, volume]);
 
   const formatTime = useMemo(() => {
     return (time: number) => {
@@ -339,7 +318,8 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
             poster={poster}
             className="w-full h-full max-h-[100vh] object-contain"
             crossOrigin="anonymous"
-            preload="metadata"
+            preload="auto"
+            playsInline
             onClick={togglePlay}
           >
             Tarayıcınız video oynatmayı desteklemiyor.
@@ -388,22 +368,6 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
               <div className="flex items-center justify-between gap-2 md:gap-4">
                 {/* Left Side Controls */}
                 <div className="flex items-center gap-2 md:gap-3">
-                  {/* Skip Buttons */}
-                  <button
-                    onClick={skipBackward}
-                    className="text-white hover:text-gold transition-colors"
-                    title="10 saniye geri (Sol ok)"
-                  >
-                    <SkipBack className="w-5 h-5 md:w-6 md:h-6" />
-                  </button>
-                  <button
-                    onClick={skipForward}
-                    className="text-white hover:text-gold transition-colors"
-                    title="10 saniye ileri (Sağ ok)"
-                  >
-                    <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
-                  </button>
-
                   {/* Volume Control */}
                   <div className="hidden sm:flex items-center gap-2 max-w-[150px] lg:max-w-[200px]">
                     <button
@@ -515,4 +479,4 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   );
 };
 
-export default VideoPlayer;
+export default memo(VideoPlayer);

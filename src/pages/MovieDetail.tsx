@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import VideoPlayer from "@/components/VideoPlayer";
@@ -28,13 +28,7 @@ const MovieDetail = () => {
   const [loading, setLoading] = useState(true);
   const [isMovie, setIsMovie] = useState(false);
   
-  useEffect(() => {
-    if (id) {
-      loadContent();
-    }
-  }, [id]);
-
-  const loadContent = async () => {
+  const loadContent = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -122,7 +116,13 @@ const MovieDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    if (id) {
+      loadContent();
+    }
+  }, [id, loadContent]);
 
   if (loading) {
     return (
@@ -151,10 +151,13 @@ const MovieDetail = () => {
     );
   }
 
-// Determine video source based on content type, avoid false "no video" flash for series
-const videoSrc = isMovie
-  ? content.video_url
-  : (selectedEpisode?.video_url || (episodes.length > 0 ? episodes[0]?.video_url : undefined));
+  // Determine video source based on content type, avoid false "no video" flash for series
+  const videoSrc = useMemo(() => 
+    isMovie
+      ? content.video_url
+      : (selectedEpisode?.video_url || (episodes.length > 0 ? episodes[0]?.video_url : undefined)),
+    [isMovie, content.video_url, selectedEpisode, episodes]
+  );
 
   return (
     <div className="min-h-screen bg-cinema-dark">
@@ -208,6 +211,8 @@ const videoSrc = isMovie
               <img
                 src={content.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
                 alt={content.title}
+                loading="eager"
+                fetchPriority="high"
                 className="w-full rounded-lg shadow-2xl"
               />
             </div>
@@ -272,6 +277,7 @@ const videoSrc = isMovie
                             <img
                               src={episode.thumbnail_url}
                               alt={episode.title}
+                              loading="lazy"
                               className="w-32 h-20 object-cover rounded"
                             />
                           )}

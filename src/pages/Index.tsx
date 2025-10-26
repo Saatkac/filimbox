@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,29 +12,35 @@ const Index = () => {
   const [series, setSeries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  useEffect(() => {
-    loadContent();
-  }, []);
-
-  const loadContent = async () => {
+  const loadContent = useCallback(async () => {
     setLoading(true);
     const [moviesData, seriesData] = await Promise.all([
-      supabase.from("movies").select("*").order("created_at", { ascending: false }),
-      supabase.from("series").select("*").order("created_at", { ascending: false }),
+      supabase.from("movies").select("id,title,poster_url,backdrop_url,rating,year,category,description,duration").order("created_at", { ascending: false }),
+      supabase.from("series").select("id,title,poster_url,backdrop_url,rating,year,category,description").order("created_at", { ascending: false }),
     ]);
     
     setMovies(moviesData.data || []);
     setSeries(seriesData.data || []);
     setLoading(false);
-  };
+  }, []);
 
-  const allContent = [...movies, ...series.map(s => ({ ...s, isSeries: true }))];
+  useEffect(() => {
+    loadContent();
+  }, [loadContent]);
+
+  const allContent = useMemo(() => 
+    [...movies, ...series.map(s => ({ ...s, isSeries: true }))],
+    [movies, series]
+  );
   
-  const filteredContent = selectedCategory === "Tümü" 
-    ? allContent 
-    : allContent.filter(item => item.category === selectedCategory);
+  const filteredContent = useMemo(() => 
+    selectedCategory === "Tümü" 
+      ? allContent 
+      : allContent.filter(item => item.category === selectedCategory),
+    [selectedCategory, allContent]
+  );
 
-  const featuredContent = allContent[0];
+  const featuredContent = useMemo(() => allContent[0], [allContent]);
 
   if (loading) {
     return (
@@ -57,6 +63,8 @@ const Index = () => {
             <img
               src={featuredContent.backdrop_url || featuredContent.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=1920&h=1080&fit=crop"}
               alt={featuredContent.title}
+              loading="eager"
+              fetchPriority="high"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-cinema-dark via-cinema-dark/80 to-transparent" />

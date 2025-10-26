@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import { Star, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ const MovieCard = ({ id, title, poster, rating, year, category }: MovieCardProps
           <img
             src={poster}
             alt={title}
+            loading="lazy"
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
@@ -47,4 +49,4 @@ const MovieCard = ({ id, title, poster, rating, year, category }: MovieCardProps
   );
 };
 
-export default MovieCard;
+export default memo(MovieCard);
