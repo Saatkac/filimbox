@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -23,9 +23,6 @@ interface VideoPlayerProps {
 const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
-  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -38,34 +35,6 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [qualities, setQualities] = useState<{ level: number; height: number }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
-
-  // Initialize Web Audio API for volume boost
-  useEffect(() => {
-    if (!videoRef.current) return;
-
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const source = audioContext.createMediaElementSource(videoRef.current);
-      const gainNode = audioContext.createGain();
-
-      source.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      audioContextRef.current = audioContext;
-      gainNodeRef.current = gainNode;
-      sourceNodeRef.current = source;
-
-      console.log("VideoPlayer: Web Audio API initialized for volume boost");
-    } catch (err) {
-      console.error("VideoPlayer: Failed to initialize Web Audio API", err);
-    }
-
-    return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-    };
-  }, []);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -109,7 +78,17 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
-          backBufferLength: 90,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferHole: 0.5,
+          highBufferWatchdogPeriod: 2,
+          nudgeOffset: 0.1,
+          nudgeMaxRetry: 3,
+          maxFragLookUpTolerance: 0.25,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 10,
+          liveDurationInfinity: false,
           xhrSetup: (xhr, url) => {
             xhr.withCredentials = false;
           },
@@ -250,16 +229,9 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
 
   const handleVolumeChange = useCallback((value: number[]) => {
     if (videoRef.current) {
-      const newVolume = value[0];
+      const newVolume = Math.min(value[0], 2); // Limit to 200%
       setVolume(newVolume);
-      
-      // Use Web Audio API gain node for volume boost beyond 100%
-      if (gainNodeRef.current) {
-        gainNodeRef.current.gain.value = newVolume;
-      }
-      
-      // Keep video element volume at 1 (let gain node handle the boost)
-      videoRef.current.volume = 1;
+      videoRef.current.volume = newVolume;
       setIsMuted(false);
     }
   }, []);
@@ -287,10 +259,15 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     setIsFullscreen(!isFullscreen);
   }, [isFullscreen]);
 
-  // Keyboard controls
+  // Keyboard controls - only when player is focused
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent default only for video player shortcuts
+      // Only respond if the player container or its children have focus
+      if (!container.contains(document.activeElement)) return;
+      
       switch (e.key) {
         case ' ':
         case 'k':
@@ -307,11 +284,11 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           break;
         case 'ArrowUp':
           e.preventDefault();
-          if (volume < 6) handleVolumeChange([volume + 0.5]);
+          if (volume < 2) handleVolumeChange([Math.min(volume + 0.1, 2)]);
           break;
         case 'ArrowDown':
           e.preventDefault();
-          if (volume > 0) handleVolumeChange([volume - 0.5]);
+          if (volume > 0) handleVolumeChange([Math.max(volume - 0.1, 0)]);
           break;
         case 'f':
           e.preventDefault();
@@ -328,16 +305,18 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [togglePlay, skipBackward, skipForward, handleVolumeChange, toggleFullscreen, toggleMute, volume]);
 
-  const formatTime = (time: number) => {
-    const hours = Math.floor(time / 3600);
-    const minutes = Math.floor((time % 3600) / 60);
-    const seconds = Math.floor(time % 60);
-    
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
+  const formatTime = useMemo(() => {
+    return (time: number) => {
+      const hours = Math.floor(time / 3600);
+      const minutes = Math.floor((time % 3600) / 60);
+      const seconds = Math.floor(time % 60);
+      
+      if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    };
+  }, []);
 
   return (
     <div 
@@ -346,6 +325,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
       onTouchStart={() => setShowControls(true)}
+      tabIndex={0}
     >
       {error ? (
         <Alert variant="destructive" className="m-4">
@@ -439,7 +419,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
                     </button>
                     <Slider
                       value={[volume]}
-                      max={6}
+                      max={2}
                       step={0.1}
                       onValueChange={handleVolumeChange}
                       className="flex-1"
