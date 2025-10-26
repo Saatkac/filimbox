@@ -124,6 +124,14 @@ const MovieDetail = () => {
     }
   }, [id, loadContent]);
 
+  // Determine video source - must be before early returns (hooks rule)
+  const videoSrc = useMemo(() => 
+    isMovie
+      ? content?.video_url
+      : (selectedEpisode?.video_url || (episodes.length > 0 ? episodes[0]?.video_url : undefined)),
+    [isMovie, content?.video_url, selectedEpisode, episodes]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-cinema-dark">
@@ -150,14 +158,6 @@ const MovieDetail = () => {
       </div>
     );
   }
-
-  // Determine video source based on content type, avoid false "no video" flash for series
-  const videoSrc = useMemo(() => 
-    isMovie
-      ? content.video_url
-      : (selectedEpisode?.video_url || (episodes.length > 0 ? episodes[0]?.video_url : undefined)),
-    [isMovie, content.video_url, selectedEpisode, episodes]
-  );
 
   return (
     <div className="min-h-screen bg-cinema-dark">
