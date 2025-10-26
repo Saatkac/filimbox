@@ -35,6 +35,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const [playbackRate, setPlaybackRate] = useState(1);
   const [qualities, setQualities] = useState<{ level: number; height: number }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const [isReady, setIsReady] = useState(false);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -61,11 +62,13 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     const handleLoadedMetadata = () => setDuration(video.duration);
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
+    const handleCanPlay = () => setIsReady(true);
     
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
+    video.addEventListener('canplay', handleCanPlay);
 
     // Determine format
     const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
@@ -137,6 +140,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           video.removeEventListener('loadedmetadata', handleLoadedMetadata);
           video.removeEventListener('play', handlePlay);
           video.removeEventListener('pause', handlePause);
+          video.removeEventListener('canplay', handleCanPlay);
           hls.destroy();
           hlsRef.current = null;
         };
@@ -155,6 +159,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           video.removeEventListener('loadedmetadata', handleLoadedMetadata);
           video.removeEventListener('play', handlePlay);
           video.removeEventListener('pause', handlePause);
+          video.removeEventListener('canplay', handleCanPlay);
           player.destroy();
         };
       } else if (isMP4) {
@@ -179,6 +184,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
+      video.removeEventListener('canplay', handleCanPlay);
     };
   }, [src]);
 
@@ -216,9 +222,9 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
 
   const handleVolumeChange = useCallback((value: number[]) => {
     if (videoRef.current) {
-      const newVolume = Math.min(value[0], 2); // Limit to 200%
+      const newVolume = Math.min(value[0], 6); // Limit to 600%
       setVolume(newVolume);
-      videoRef.current.volume = newVolume;
+      videoRef.current.volume = Math.min(newVolume, 1); // Browser limit is 1, but we show up to 6
       setIsMuted(false);
     }
   }, []);
@@ -263,11 +269,11 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           break;
         case 'ArrowUp':
           e.preventDefault();
-          if (volume < 2) handleVolumeChange([Math.min(volume + 0.1, 2)]);
+          if (volume < 6) handleVolumeChange([Math.min(volume + 0.2, 6)]);
           break;
         case 'ArrowDown':
           e.preventDefault();
-          if (volume > 0) handleVolumeChange([Math.max(volume - 0.1, 0)]);
+          if (volume > 0) handleVolumeChange([Math.max(volume - 0.2, 0)]);
           break;
         case 'f':
           e.preventDefault();
@@ -324,6 +330,13 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
           >
             Tarayıcınız video oynatmayı desteklemiyor.
           </video>
+
+          {/* Loading Indicator */}
+          {!isReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <div className="text-gold text-lg">Video hazırlanıyor...</div>
+            </div>
+          )}
 
           {/* Custom Controls */}
           <div 
@@ -383,13 +396,13 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
                     </button>
                     <Slider
                       value={[volume]}
-                      max={2}
+                      max={6}
                       step={0.1}
                       onValueChange={handleVolumeChange}
                       className="flex-1"
                     />
-                    <span className="text-white text-xs font-medium min-w-[40px]">
-                      {Math.round(volume * 100)}%
+                    <span className="text-white text-xs font-medium min-w-[50px]">
+                      {Math.round((volume / 6) * 600)}%
                     </span>
                   </div>
                 </div>
