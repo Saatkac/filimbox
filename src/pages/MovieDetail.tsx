@@ -4,9 +4,11 @@ import Navbar from "@/components/Navbar";
 import VideoPlayer from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Star, Clock, Calendar, ArrowLeft, Play } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Star, Clock, Calendar, ArrowLeft, Play, Heart } from "lucide-react";
 
 interface Episode {
   id: string;
@@ -21,12 +23,16 @@ interface Episode {
 
 const MovieDetail = () => {
   const { id } = useParams();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [content, setContent] = useState<any>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null);
   const [similarContent, setSimilarContent] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isMovie, setIsMovie] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteId, setFavoriteId] = useState<string | null>(null);
   
   const loadContent = useCallback(async () => {
     setLoading(true);
@@ -124,6 +130,69 @@ const MovieDetail = () => {
     }
   }, [id, loadContent]);
 
+  useEffect(() => {
+    if (user && id) {
+      checkFavorite();
+    }
+  }, [user, id]);
+
+  const checkFavorite = async () => {
+    if (!user || !id) return;
+
+    const { data } = await supabase
+      .from("favorites")
+      .select("id")
+      .eq("user_id", user.id)
+      .or(`movie_id.eq.${id},series_id.eq.${id}`)
+      .maybeSingle();
+
+    if (data) {
+      setIsFavorite(true);
+      setFavoriteId(data.id);
+    } else {
+      setIsFavorite(false);
+      setFavoriteId(null);
+    }
+  };
+
+  const toggleFavorite = async () => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Hata", description: "Favorilere eklemek için giriş yapmalısınız" });
+      return;
+    }
+
+    if (isFavorite && favoriteId) {
+      const { error } = await supabase
+        .from("favorites")
+        .delete()
+        .eq("id", favoriteId);
+
+      if (!error) {
+        setIsFavorite(false);
+        setFavoriteId(null);
+        toast({ title: "Başarılı", description: "Favorilerden çıkarıldı" });
+      }
+    } else {
+      const { data, error } = await supabase
+        .from("favorites")
+        .insert({
+          user_id: user.id,
+          movie_id: isMovie ? id : null,
+          series_id: isMovie ? null : id,
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setIsFavorite(true);
+        setFavoriteId(data.id);
+        toast({ title: "Başarılı", description: "Favorilere eklendi" });
+      } else if (error) {
+        toast({ variant: "destructive", title: "Hata", description: error.message });
+      }
+    }
+  };
+
   // Determine video source - must be before early returns (hooks rule)
   const videoSrc = useMemo(() => 
     isMovie
@@ -218,9 +287,19 @@ const MovieDetail = () => {
             </div>
             
             <div className="md:w-2/3">
-              <h1 className="text-4xl md:text-5xl font-bold mb-4 gold-glow">
-                {content.title}
-              </h1>
+              <div className="flex items-center justify-between mb-4">
+                <h1 className="text-4xl md:text-5xl font-bold gold-glow">
+                  {content.title}
+                </h1>
+                <Button
+                  onClick={toggleFavorite}
+                  variant="outline"
+                  size="icon"
+                  className="border-gold hover:bg-gold/20"
+                >
+                  <Heart className={`w-6 h-6 ${isFavorite ? "fill-gold text-gold" : "text-gold"}`} />
+                </Button>
+              </div>
               
               <div className="flex flex-wrap items-center gap-4 mb-6">
                 <div className="flex items-center gap-2 px-4 py-2 bg-card rounded-lg">

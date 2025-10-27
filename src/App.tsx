@@ -9,6 +9,8 @@ import Categories from "./pages/Categories";
 import Search from "./pages/Search";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
+import Favorites from "./pages/Favorites";
+import AccountSettings from "./pages/AccountSettings";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -26,6 +28,8 @@ const App = () => (
           <Route path="/categories" element={<Categories />} />
           <Route path="/search" element={<Search />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/favorites" element={<Favorites />} />
+          <Route path="/account-settings" element={<AccountSettings />} />
           <Route
             path="/admin"
             element={

@@ -36,6 +36,9 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const [qualities, setQualities] = useState<{ level: number; height: number }[]>([]);
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [isReady, setIsReady] = useState(false);
+  const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -63,6 +66,20 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
     const handleCanPlay = () => setIsReady(true);
+
+    // Web Audio API for volume boost
+    if (!audioContextRef.current) {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioContext.createMediaElementSource(video);
+      const gainNode = audioContext.createGain();
+      
+      source.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      audioContextRef.current = audioContext;
+      gainNodeRef.current = gainNode;
+      gainNode.gain.value = volume;
+    }
     
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -221,12 +238,12 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   }, []);
 
   const handleVolumeChange = useCallback((value: number[]) => {
-    if (videoRef.current) {
-      const newVolume = Math.min(value[0], 6); // Limit to 600%
-      setVolume(newVolume);
-      videoRef.current.volume = Math.min(newVolume, 1); // Browser limit is 1, but we show up to 6
-      setIsMuted(false);
+    const newVolume = Math.min(value[0], 6); // Limit to 600%
+    setVolume(newVolume);
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = newVolume;
     }
+    setIsMuted(false);
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -236,6 +253,19 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       videoRef.current.muted = newMuted;
     }
   }, [isMuted]);
+
+  const handleMouseMove = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeout) {
+      clearTimeout(controlsTimeout);
+    }
+    const timeout = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false);
+      }
+    }, 3000);
+    setControlsTimeout(timeout);
+  }, [controlsTimeout, isPlaying]);
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;

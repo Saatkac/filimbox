@@ -11,6 +11,41 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Film, Tv, LogOut, Trash2, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { categories } from "@/data/categories";
+import { z } from "zod";
+
+const movieSchema = z.object({
+  title: z.string().trim().min(1, "Başlık gereklidir").max(200),
+  description: z.string().trim().max(1000).transform(val => val || undefined),
+  poster_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
+  backdrop_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
+  rating: z.number().min(0).max(10),
+  year: z.number().min(1900).max(2100),
+  category: z.string().min(1, "Kategori gereklidir"),
+  duration: z.string().trim().min(1, "Süre gereklidir"),
+  video_url: z.string().url("Geçerli bir video URL girin"),
+  trailer_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
+});
+
+const seriesSchema = z.object({
+  title: z.string().trim().min(1, "Başlık gereklidir").max(200),
+  description: z.string().trim().max(1000).transform(val => val || undefined),
+  poster_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
+  backdrop_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
+  rating: z.number().min(0).max(10),
+  year: z.number().min(1900).max(2100),
+  category: z.string().min(1, "Kategori gereklidir"),
+  trailer_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
+});
+
+const episodeSchema = z.object({
+  title: z.string().trim().min(1, "Başlık gereklidir").max(200),
+  description: z.string().trim().max(1000).transform(val => val || undefined),
+  episode_number: z.number().min(1, "Bölüm numarası gereklidir"),
+  season_number: z.number().min(1, "Sezon numarası gereklidir"),
+  video_url: z.string().url("Geçerli bir video URL girin"),
+  duration: z.string().trim().transform(val => val || undefined),
+  thumbnail_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
+});
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -59,28 +94,36 @@ const Admin = () => {
   const handleAddMovie = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const videoRaw = (formData.get("video_url") as string) || "";
-    const safeVideoUrl = videoRaw.replace(/&amp;/g, "&").trim();
     
-    const { error } = await supabase.from("movies").insert({
-      title: formData.get("title") as string,
-      description: formData.get("description") as string,
-      poster_url: formData.get("poster_url") as string,
-      backdrop_url: formData.get("backdrop_url") as string,
-      rating: parseFloat(formData.get("rating") as string),
-      year: parseInt(formData.get("year") as string),
-      category: formData.get("category") as string,
-      duration: formData.get("duration") as string,
-      video_url: safeVideoUrl,
-      trailer_url: formData.get("trailer_url") as string,
-    });
+    const movieData = {
+      title: (formData.get("title") as string) || "",
+      description: (formData.get("description") as string) || "",
+      poster_url: (formData.get("poster_url") as string) || "",
+      backdrop_url: (formData.get("backdrop_url") as string) || "",
+      rating: parseFloat((formData.get("rating") as string) || "0"),
+      year: parseInt((formData.get("year") as string) || "0"),
+      category: (formData.get("category") as string) || "",
+      duration: (formData.get("duration") as string) || "",
+      video_url: ((formData.get("video_url") as string) || "").replace(/&amp;/g, "&").trim(),
+      trailer_url: (formData.get("trailer_url") as string) || "",
+    };
 
-    if (error) {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
-    } else {
-      toast({ title: "Başarılı", description: "Film eklendi" });
-      e.currentTarget.reset();
-      loadMovies();
+    try {
+      const validated = movieSchema.parse(movieData);
+      
+      const { error } = await supabase.from("movies").insert([validated as any]);
+
+      if (error) {
+        toast({ variant: "destructive", title: "Hata", description: error.message });
+      } else {
+        toast({ title: "Başarılı", description: "Film eklendi" });
+        e.currentTarget.reset();
+        loadMovies();
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({ variant: "destructive", title: "Doğrulama Hatası", description: error.errors[0].message });
+      }
     }
   };
 
@@ -88,49 +131,69 @@ const Admin = () => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
-    const { error } = await supabase.from("series").insert({
-      title: formData.get("title") as string,
-      description: formData.get("description") as string,
-      poster_url: formData.get("poster_url") as string,
-      backdrop_url: formData.get("backdrop_url") as string,
-      rating: parseFloat(formData.get("rating") as string),
-      year: parseInt(formData.get("year") as string),
-      category: formData.get("category") as string,
-      trailer_url: formData.get("trailer_url") as string,
-    });
+    const seriesData = {
+      title: (formData.get("title") as string) || "",
+      description: (formData.get("description") as string) || "",
+      poster_url: (formData.get("poster_url") as string) || "",
+      backdrop_url: (formData.get("backdrop_url") as string) || "",
+      rating: parseFloat((formData.get("rating") as string) || "0"),
+      year: parseInt((formData.get("year") as string) || "0"),
+      category: (formData.get("category") as string) || "",
+      trailer_url: (formData.get("trailer_url") as string) || "",
+    };
 
-    if (error) {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
-    } else {
-      toast({ title: "Başarılı", description: "Dizi eklendi" });
-      e.currentTarget.reset();
-      loadSeries();
+    try {
+      const validated = seriesSchema.parse(seriesData);
+      
+      const { error } = await supabase.from("series").insert([validated as any]);
+
+      if (error) {
+        toast({ variant: "destructive", title: "Hata", description: error.message });
+      } else {
+        toast({ title: "Başarılı", description: "Dizi eklendi" });
+        e.currentTarget.reset();
+        loadSeries();
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({ variant: "destructive", title: "Doğrulama Hatası", description: error.errors[0].message });
+      }
     }
   };
 
   const handleAddEpisode = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const videoRaw = (formData.get("video_url") as string) || "";
-    const safeVideoUrl = videoRaw.replace(/&amp;/g, "&").trim();
     
-    const { error } = await supabase.from("episodes").insert({
-      series_id: selectedSeries,
-      title: formData.get("title") as string,
-      description: formData.get("description") as string,
-      episode_number: parseInt(formData.get("episode_number") as string),
-      season_number: parseInt(formData.get("season_number") as string),
-      video_url: safeVideoUrl,
-      duration: formData.get("duration") as string,
-      thumbnail_url: formData.get("thumbnail_url") as string,
-    });
+    const episodeData = {
+      title: (formData.get("title") as string) || "",
+      description: (formData.get("description") as string) || "",
+      episode_number: parseInt((formData.get("episode_number") as string) || "0"),
+      season_number: parseInt((formData.get("season_number") as string) || "0"),
+      video_url: ((formData.get("video_url") as string) || "").replace(/&amp;/g, "&").trim(),
+      duration: (formData.get("duration") as string) || "",
+      thumbnail_url: (formData.get("thumbnail_url") as string) || "",
+    };
 
-    if (error) {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
-    } else {
-      toast({ title: "Başarılı", description: "Bölüm eklendi" });
-      e.currentTarget.reset();
-      loadEpisodes(selectedSeries);
+    try {
+      const validated = episodeSchema.parse(episodeData);
+      
+      const { error } = await supabase.from("episodes").insert([{
+        series_id: selectedSeries,
+        ...validated,
+      } as any]);
+
+      if (error) {
+        toast({ variant: "destructive", title: "Hata", description: error.message });
+      } else {
+        toast({ title: "Başarılı", description: "Bölüm eklendi" });
+        e.currentTarget.reset();
+        loadEpisodes(selectedSeries);
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({ variant: "destructive", title: "Doğrulama Hatası", description: error.errors[0].message });
+      }
     }
   };
 

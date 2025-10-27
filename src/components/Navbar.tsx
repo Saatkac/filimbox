@@ -1,9 +1,15 @@
-import { Search, Film, LogIn, UserCircle, Shield } from "lucide-react";
+import { Search, Film, LogIn, UserCircle, Shield, Heart, Settings } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -60,7 +66,23 @@ const Navbar = () => {
                     Admin
                   </Button>
                 )}
-                <UserCircle className="w-6 h-6 text-gold" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="focus:outline-none">
+                      <UserCircle className="w-6 h-6 text-gold hover:text-gold-light transition-colors cursor-pointer" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-card border-border">
+                    <DropdownMenuItem onClick={() => navigate("/favorites")} className="cursor-pointer">
+                      <Heart className="w-4 h-4 mr-2" />
+                      Favorilerim
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/account-settings")} className="cursor-pointer">
+                      <Settings className="w-4 h-4 mr-2" />
+                      Hesap Ayarları
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             ) : (
               <Button
