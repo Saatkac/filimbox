@@ -25,10 +25,22 @@ const AccountSettings = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [username, setUsername] = useState("");
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
       if (!user) return;
+      
+      // Check if user is admin
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      
+      setIsAdmin(!!roleData);
+      
       const { data } = await supabase
         .from('profiles')
         .select('username')
@@ -99,6 +111,11 @@ const AccountSettings = () => {
 
   const handleUsernameChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isAdmin) {
+      toast({ variant: "destructive", title: "Hata", description: "Admin kullanıcı adı değiştirilemez" });
+      return;
+    }
     
     try {
       usernameSchema.parse(username);
@@ -176,6 +193,7 @@ const AccountSettings = () => {
               </CardTitle>
               <CardDescription>
                 {currentUsername ? `Mevcut kullanıcı adı: ${currentUsername}` : 'Henüz kullanıcı adı belirlenmedi'}
+                {isAdmin && <span className="block text-destructive mt-1">Admin kullanıcı adı değiştirilemez</span>}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -190,12 +208,13 @@ const AccountSettings = () => {
                     placeholder="kullaniciadi"
                     className="bg-secondary"
                     required
+                    disabled={isAdmin}
                   />
                 </div>
                 <Button 
                   type="submit" 
                   className="bg-gold hover:bg-gold-light text-black"
-                  disabled={loading}
+                  disabled={loading || isAdmin}
                 >
                   Kullanıcı Adını Güncelle
                 </Button>

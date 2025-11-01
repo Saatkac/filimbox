@@ -20,6 +20,7 @@ interface Comment {
   profiles: {
     username: string | null;
   } | null;
+  isAdmin?: boolean;
 }
 
 interface CommentSectionProps {
@@ -61,8 +62,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
         is_spoiler,
         created_at,
         user_id
-      `)
-      .order("created_at", { ascending: false });
+      `);
 
     if (movieId) {
       query.eq("movie_id", movieId);
@@ -73,21 +73,36 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
     const { data: commentsData, error } = await query;
 
     if (!error && commentsData) {
-      // Fetch usernames separately
+      // Fetch usernames and check admin status
       const userIds = [...new Set(commentsData.map(c => c.user_id))];
       const { data: profilesData } = await supabase
         .from("profiles")
         .select("user_id, username")
         .in("user_id", userIds);
 
+      const { data: adminRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin")
+        .in("user_id", userIds);
+
       const profilesMap = new Map(profilesData?.map(p => [p.user_id, p.username]) || []);
+      const adminIds = new Set(adminRoles?.map(r => r.user_id) || []);
 
       const commentsWithProfiles = commentsData.map(comment => ({
         ...comment,
         profiles: {
           username: profilesMap.get(comment.user_id) || null,
         },
+        isAdmin: adminIds.has(comment.user_id),
       }));
+
+      // Sort: admin comments first, then by date
+      commentsWithProfiles.sort((a, b) => {
+        if (a.isAdmin && !b.isAdmin) return -1;
+        if (!a.isAdmin && b.isAdmin) return 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
 
       setComments(commentsWithProfiles);
     }
@@ -190,7 +205,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
           <p className="text-muted-foreground text-center py-8">Henüz yorum yapılmamış. İlk yorumu siz yapın!</p>
         ) : (
           comments.map((comment) => (
-            <Card key={comment.id} className="bg-card border-border">
+            <Card key={comment.id} className={`bg-card border-border ${comment.isAdmin ? 'border-destructive/50' : ''}`}>
               <CardContent className="pt-6">
                 {comment.is_spoiler && (
                   <div className="flex items-center gap-2 mb-3 text-destructive">
@@ -199,11 +214,13 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
                   </div>
                 )}
                 
-                <p className="text-foreground mb-3 whitespace-pre-wrap">{comment.comment}</p>
+                <p className={`mb-3 whitespace-pre-wrap ${comment.isAdmin ? 'text-destructive font-semibold' : 'text-foreground'}`}>
+                  {comment.comment}
+                </p>
                 
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">
+                    <span className={`font-medium ${comment.isAdmin ? 'text-destructive' : ''}`}>
                       {comment.profiles?.username || "Anonim Kullanıcı"}
                     </span>
                     <span>•</span>

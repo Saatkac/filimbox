@@ -123,18 +123,24 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          maxBufferLength: 30,
+          maxBufferLength: 60,
           maxMaxBufferLength: 600,
-          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferSize: 120 * 1000 * 1000,
           maxBufferHole: 0.5,
           highBufferWatchdogPeriod: 2,
           nudgeOffset: 0.1,
-          nudgeMaxRetry: 3,
+          nudgeMaxRetry: 5,
           maxFragLookUpTolerance: 0.25,
           startLevel: -1,
           autoStartLoad: true,
           startPosition: -1,
-          backBufferLength: 90,
+          backBufferLength: 120,
+          manifestLoadingTimeOut: 10000,
+          manifestLoadingMaxRetry: 6,
+          levelLoadingTimeOut: 10000,
+          levelLoadingMaxRetry: 6,
+          fragLoadingTimeOut: 20000,
+          fragLoadingMaxRetry: 8,
           xhrSetup: (xhr, url) => {
             xhr.withCredentials = false;
           },
@@ -297,25 +303,28 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       clearTimeout(controlsTimeout);
     }
     
-    if (isPlaying) {
-      const timeout = setTimeout(() => {
-        setShowControls(false);
-      }, 3000);
-      setControlsTimeout(timeout);
-    } else {
-      setShowControls(true);
-    }
+    const timeout = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+    setControlsTimeout(timeout);
 
     return () => {
       if (controlsTimeout) {
         clearTimeout(controlsTimeout);
       }
     };
-  }, [isPlaying]);
+  }, []);
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
-  }, []);
+    if (controlsTimeout) {
+      clearTimeout(controlsTimeout);
+    }
+    const timeout = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+    setControlsTimeout(timeout);
+  }, [controlsTimeout]);
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
@@ -386,11 +395,16 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   return (
     <div 
       ref={containerRef}
-      className="relative w-full bg-black rounded-lg overflow-hidden group aspect-video"
+      className="relative w-full bg-black rounded-lg overflow-hidden group aspect-video touch-none"
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
-      onTouchStart={() => setShowControls(true)}
+      onTouchStart={() => {
+        setShowControls(true);
+        if (controlsTimeout) clearTimeout(controlsTimeout);
+        const timeout = setTimeout(() => setShowControls(false), 3000);
+        setControlsTimeout(timeout);
+      }}
       tabIndex={0}
     >
       {error ? (
@@ -405,7 +419,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             poster={poster}
             className="w-full h-full max-h-[100vh] object-contain"
             crossOrigin="anonymous"
-            preload="metadata"
+            preload="auto"
             playsInline
             onClick={togglePlay}
           >
@@ -463,7 +477,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
                 {/* Left Side Controls */}
                 <div className="flex items-center gap-2 md:gap-3">
                   {/* Volume Control */}
-                  <div className="hidden sm:flex items-center gap-2 w-[200px]">
+                  <div className="hidden md:flex items-center gap-2 w-[150px] lg:w-[200px]">
                     <button
                       onClick={toggleMute}
                       className="text-white hover:text-gold transition-colors flex-shrink-0"
@@ -483,10 +497,23 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
                         onValueChange={handleVolumeChange}
                       />
                     </div>
-                    <span className="text-white text-xs font-medium min-w-[45px] flex-shrink-0 text-right">
+                    <span className="text-white text-xs font-medium min-w-[40px] lg:min-w-[45px] flex-shrink-0 text-right">
                       {Math.round((volume / 6) * 600)}%
                     </span>
                   </div>
+                  
+                  {/* Mobile Volume Button */}
+                  <button
+                    onClick={toggleMute}
+                    className="md:hidden text-white hover:text-gold transition-colors"
+                    title="Sesi aç/kapat"
+                  >
+                    {isMuted || volume === 0 ? (
+                      <VolumeX className="w-5 h-5" />
+                    ) : (
+                      <Volume2 className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
 
                 {/* Right Side Controls */}
