@@ -18,9 +18,11 @@ import {
 interface VideoPlayerProps {
   src: string;
   poster?: string;
+  initialProgress?: number;
+  onProgressUpdate?: (currentTime: number, duration: number) => void;
 }
 
-const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
+const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -39,6 +41,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
+  const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -62,9 +65,31 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
 
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
-    const handleLoadedMetadata = () => setDuration(video.duration);
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+      // Seek to initial progress if provided
+      if (initialProgress > 0 && video.duration > 0) {
+        video.currentTime = Math.min(initialProgress, video.duration - 10);
+      }
+    };
+    const handlePlay = () => {
+      setIsPlaying(true);
+      // Start progress update interval
+      if (onProgressUpdate && !progressUpdateInterval.current) {
+        progressUpdateInterval.current = setInterval(() => {
+          if (video.currentTime > 0 && video.duration > 0) {
+            onProgressUpdate(video.currentTime, video.duration);
+          }
+        }, 5000); // Update every 5 seconds
+      }
+    };
+    const handlePause = () => {
+      setIsPlaying(false);
+      // Save progress on pause
+      if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
+        onProgressUpdate(video.currentTime, video.duration);
+      }
+    };
     const handleCanPlay = () => setIsReady(true);
 
     // Web Audio API for volume boost
@@ -97,17 +122,19 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
         console.log("VideoPlayer: using HLS.js");
         const hls = new Hls({
           enableWorker: true,
-          lowLatencyMode: false,
-          maxBufferLength: 20,
-          maxMaxBufferLength: 30,
-          maxBufferSize: 30 * 1000 * 1000,
-          maxBufferHole: 0.3,
-          highBufferWatchdogPeriod: 1,
-          nudgeOffset: 0.05,
-          nudgeMaxRetry: 2,
-          maxFragLookUpTolerance: 0.2,
+          lowLatencyMode: true,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 600,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferHole: 0.5,
+          highBufferWatchdogPeriod: 2,
+          nudgeOffset: 0.1,
+          nudgeMaxRetry: 3,
+          maxFragLookUpTolerance: 0.25,
           startLevel: -1,
           autoStartLoad: true,
+          startPosition: -1,
+          backBufferLength: 90,
           xhrSetup: (xhr, url) => {
             xhr.withCredentials = false;
           },
@@ -202,8 +229,19 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('canplay', handleCanPlay);
+      
+      // Clear progress update interval
+      if (progressUpdateInterval.current) {
+        clearInterval(progressUpdateInterval.current);
+        progressUpdateInterval.current = null;
+      }
+      
+      // Save final progress
+      if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
+        onProgressUpdate(video.currentTime, video.duration);
+      }
     };
-  }, [src]);
+  }, [src, onProgressUpdate, initialProgress]);
 
   // Control functions with useCallback
   const togglePlay = useCallback(() => {
@@ -254,18 +292,30 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     }
   }, [isMuted]);
 
-  const handleMouseMove = useCallback(() => {
-    setShowControls(true);
+  useEffect(() => {
     if (controlsTimeout) {
       clearTimeout(controlsTimeout);
     }
-    const timeout = setTimeout(() => {
-      if (isPlaying) {
+    
+    if (isPlaying) {
+      const timeout = setTimeout(() => {
         setShowControls(false);
+      }, 3000);
+      setControlsTimeout(timeout);
+    } else {
+      setShowControls(true);
+    }
+
+    return () => {
+      if (controlsTimeout) {
+        clearTimeout(controlsTimeout);
       }
-    }, 3000);
-    setControlsTimeout(timeout);
-  }, [controlsTimeout, isPlaying]);
+    };
+  }, [isPlaying]);
+
+  const handleMouseMove = useCallback(() => {
+    setShowControls(true);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
@@ -337,6 +387,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
     <div 
       ref={containerRef}
       className="relative w-full bg-black rounded-lg overflow-hidden group aspect-video"
+      onMouseMove={handleMouseMove}
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
       onTouchStart={() => setShowControls(true)}
@@ -354,7 +405,7 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
             poster={poster}
             className="w-full h-full max-h-[100vh] object-contain"
             crossOrigin="anonymous"
-            preload="auto"
+            preload="metadata"
             playsInline
             onClick={togglePlay}
           >
@@ -412,10 +463,10 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
                 {/* Left Side Controls */}
                 <div className="flex items-center gap-2 md:gap-3">
                   {/* Volume Control */}
-                  <div className="hidden sm:flex items-center gap-2 max-w-[150px] lg:max-w-[200px]">
+                  <div className="hidden sm:flex items-center gap-2 w-[200px]">
                     <button
                       onClick={toggleMute}
-                      className="text-white hover:text-gold transition-colors"
+                      className="text-white hover:text-gold transition-colors flex-shrink-0"
                       title="Sesi aç/kapat (M)"
                     >
                       {isMuted || volume === 0 ? (
@@ -424,14 +475,15 @@ const VideoPlayer = ({ src, poster }: VideoPlayerProps) => {
                         <Volume2 className="w-5 h-5 md:w-6 md:h-6" />
                       )}
                     </button>
-                    <Slider
-                      value={[volume]}
-                      max={6}
-                      step={0.1}
-                      onValueChange={handleVolumeChange}
-                      className="flex-1"
-                    />
-                    <span className="text-white text-xs font-medium min-w-[50px]">
+                    <div className="flex-1">
+                      <Slider
+                        value={[volume]}
+                        max={6}
+                        step={0.1}
+                        onValueChange={handleVolumeChange}
+                      />
+                    </div>
+                    <span className="text-white text-xs font-medium min-w-[45px] flex-shrink-0 text-right">
                       {Math.round((volume / 6) * 600)}%
                     </span>
                   </div>

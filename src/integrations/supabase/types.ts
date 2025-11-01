@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      comments: {
+        Row: {
+          comment: string
+          created_at: string
+          id: string
+          is_spoiler: boolean
+          movie_id: string | null
+          series_id: string | null
+          user_id: string
+        }
+        Insert: {
+          comment: string
+          created_at?: string
+          id?: string
+          is_spoiler?: boolean
+          movie_id?: string | null
+          series_id?: string | null
+          user_id: string
+        }
+        Update: {
+          comment?: string
+          created_at?: string
+          id?: string
+          is_spoiler?: boolean
+          movie_id?: string | null
+          series_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_movie_id_fkey"
+            columns: ["movie_id"]
+            isOneToOne: false
+            referencedRelation: "movies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       episodes: {
         Row: {
           created_at: string | null
@@ -151,6 +196,30 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       series: {
         Row: {
           backdrop_url: string | null
@@ -213,6 +282,61 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      watch_progress: {
+        Row: {
+          duration_seconds: number | null
+          episode_id: string | null
+          id: string
+          last_watched: string
+          movie_id: string | null
+          progress_seconds: number
+          series_id: string | null
+          user_id: string
+        }
+        Insert: {
+          duration_seconds?: number | null
+          episode_id?: string | null
+          id?: string
+          last_watched?: string
+          movie_id?: string | null
+          progress_seconds?: number
+          series_id?: string | null
+          user_id: string
+        }
+        Update: {
+          duration_seconds?: number | null
+          episode_id?: string | null
+          id?: string
+          last_watched?: string
+          movie_id?: string | null
+          progress_seconds?: number
+          series_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watch_progress_episode_id_fkey"
+            columns: ["episode_id"]
+            isOneToOne: false
+            referencedRelation: "episodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "watch_progress_movie_id_fkey"
+            columns: ["movie_id"]
+            isOneToOne: false
+            referencedRelation: "movies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "watch_progress_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

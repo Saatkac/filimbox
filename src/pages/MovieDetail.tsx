@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import VideoPlayer from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
+import CommentSection from "@/components/CommentSection";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,8 @@ const MovieDetail = () => {
   const [isMovie, setIsMovie] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
+  const [watchProgress, setWatchProgress] = useState<number>(0);
+  const progressInterval = useRef<NodeJS.Timeout | null>(null);
   
   const loadContent = useCallback(async () => {
     setLoading(true);
@@ -133,8 +136,17 @@ const MovieDetail = () => {
   useEffect(() => {
     if (user && id) {
       checkFavorite();
+      loadWatchProgress();
     }
-  }, [user, id]);
+  }, [user, id, isMovie, selectedEpisode]);
+
+  useEffect(() => {
+    return () => {
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+      }
+    };
+  }, []);
 
   const checkFavorite = async () => {
     if (!user || !id) return;
@@ -153,6 +165,55 @@ const MovieDetail = () => {
       setIsFavorite(false);
       setFavoriteId(null);
     }
+  };
+
+  const loadWatchProgress = async () => {
+    if (!user || !id) return;
+
+    const query = supabase
+      .from("watch_progress")
+      .select("progress_seconds")
+      .eq("user_id", user.id);
+
+    if (isMovie) {
+      query.eq("movie_id", id);
+    } else if (selectedEpisode) {
+      query.eq("episode_id", selectedEpisode.id);
+    } else {
+      return;
+    }
+
+    const { data } = await query.maybeSingle();
+    if (data) {
+      setWatchProgress(Number(data.progress_seconds));
+    }
+  };
+
+  const saveWatchProgress = async (currentTime: number, duration: number) => {
+    if (!user || !id) return;
+
+    const progressData: any = {
+      user_id: user.id,
+      progress_seconds: currentTime,
+      duration_seconds: duration,
+      last_watched: new Date().toISOString(),
+    };
+
+    if (isMovie) {
+      progressData.movie_id = id;
+      progressData.series_id = null;
+      progressData.episode_id = null;
+    } else if (selectedEpisode) {
+      progressData.movie_id = null;
+      progressData.series_id = id;
+      progressData.episode_id = selectedEpisode.id;
+    } else {
+      return;
+    }
+
+    await supabase.from("watch_progress").upsert(progressData, {
+      onConflict: isMovie ? "user_id,movie_id" : "user_id,episode_id",
+    });
   };
 
   const toggleFavorite = async () => {
@@ -249,6 +310,8 @@ const MovieDetail = () => {
                 key={content.video_url}
                 src={content.video_url}
                 poster={content.backdrop_url || content.poster_url}
+                initialProgress={watchProgress}
+                onProgressUpdate={(current, duration) => saveWatchProgress(current, duration)}
               />
             </div>
           ) : (
@@ -266,6 +329,8 @@ const MovieDetail = () => {
               key={videoSrc}
               src={videoSrc}
               poster={content.backdrop_url || content.poster_url}
+              initialProgress={watchProgress}
+              onProgressUpdate={(current, duration) => saveWatchProgress(current, duration)}
             />
           </div>
         ) : (
@@ -394,6 +459,10 @@ const MovieDetail = () => {
               )}
             </div>
           </div>
+        </div>
+
+        <div className="container mx-auto px-4 pb-16">
+          <CommentSection movieId={isMovie ? id : undefined} seriesId={!isMovie ? id : undefined} />
         </div>
 
         {similarContent.length > 0 && (
