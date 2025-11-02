@@ -61,19 +61,26 @@ const AccountSettings = () => {
       return;
     }
 
+    if (!username.trim()) {
+      toast({ variant: "destructive", title: "Hata", description: "Kullanıcı adı boş olamaz" });
+      return;
+    }
+
     setLoading(true);
     
     const { error } = await supabase
       .from("profiles")
       .upsert({ 
         user_id: user.id, 
-        username: username.trim() 
-      });
+        username: username.trim(),
+        avatar_url: avatarUrl
+      }, { onConflict: 'user_id' });
 
     if (error) {
       toast({ variant: "destructive", title: "Hata", description: error.message });
     } else {
-      toast({ title: "Başarılı", description: "Profil güncellendi" });
+      toast({ title: "Başarılı", description: "Kullanıcı adı güncellendi" });
+      loadProfile();
     }
     
     setLoading(false);

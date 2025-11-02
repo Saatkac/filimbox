@@ -19,6 +19,7 @@ interface Comment {
   user_id: string;
   profiles: {
     username: string | null;
+    avatar_url: string;
   } | null;
   isAdmin?: boolean;
 }
@@ -73,11 +74,10 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
     const { data: commentsData, error } = await query;
 
     if (!error && commentsData) {
-      // Fetch usernames and check admin status
       const userIds = [...new Set(commentsData.map(c => c.user_id))];
       const { data: profilesData } = await supabase
         .from("profiles")
-        .select("user_id, username")
+        .select("user_id, username, avatar_url")
         .in("user_id", userIds);
 
       const { data: adminRoles } = await supabase
@@ -86,18 +86,21 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
         .eq("role", "admin")
         .in("user_id", userIds);
 
-      const profilesMap = new Map(profilesData?.map(p => [p.user_id, p.username]) || []);
+      const profilesMap = new Map(profilesData?.map(p => [p.user_id, { username: p.username, avatar_url: p.avatar_url }]) || []);
       const adminIds = new Set(adminRoles?.map(r => r.user_id) || []);
 
-      const commentsWithProfiles = commentsData.map(comment => ({
-        ...comment,
-        profiles: {
-          username: profilesMap.get(comment.user_id) || null,
-        },
-        isAdmin: adminIds.has(comment.user_id),
-      }));
+      const commentsWithProfiles = commentsData.map(comment => {
+        const profile = profilesMap.get(comment.user_id);
+        return {
+          ...comment,
+          profiles: {
+            username: profile?.username || null,
+            avatar_url: profile?.avatar_url || "https://www.hdfilmizle.life/assets/front/img/default-pp.webp",
+          },
+          isAdmin: adminIds.has(comment.user_id),
+        };
+      });
 
-      // Sort: admin comments first, then by date
       commentsWithProfiles.sort((a, b) => {
         if (a.isAdmin && !b.isAdmin) return -1;
         if (!a.isAdmin && b.isAdmin) return 1;
@@ -220,24 +223,32 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
                   </div>
                 )}
                 
-                <p className={`mb-3 whitespace-pre-wrap ${comment.isAdmin ? 'text-destructive font-semibold' : 'text-foreground'}`}>
-                  {comment.comment}
-                </p>
-                
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium ${comment.isAdmin ? 'text-destructive' : ''}`}>
-                      {comment.profiles?.username || "Anonim Kullanıcı"}
-                    </span>
-                    <span>•</span>
-                    <span>
-                      {formatDistanceToNow(new Date(comment.created_at), {
-                        addSuffix: true,
-                        locale: tr,
-                      })}
-                    </span>
+                <div className="flex items-start gap-3 mb-3">
+                  <img 
+                    src={comment.profiles?.avatar_url || "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"}
+                    alt="Profil"
+                    className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`font-medium ${comment.isAdmin ? 'text-destructive' : 'text-foreground'}`}>
+                        {comment.profiles?.username || "Anonim Kullanıcı"}
+                      </span>
+                      <span className="text-muted-foreground">•</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(comment.created_at), {
+                          addSuffix: true,
+                          locale: tr,
+                        })}
+                      </span>
+                    </div>
+                    <p className={`whitespace-pre-wrap ${comment.isAdmin ? 'text-destructive font-semibold' : 'text-foreground'}`}>
+                      {comment.comment}
+                    </p>
                   </div>
-
+                </div>
+                
+                <div className="flex items-center justify-end text-sm text-muted-foreground">
                   {(user?.id === comment.user_id || isAdmin) && (
                     <Button
                       variant="ghost"
