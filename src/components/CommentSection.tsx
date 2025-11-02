@@ -116,8 +116,14 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
       return;
     }
 
-    if (!newComment.trim()) {
+    const trimmedComment = newComment.trim();
+    if (!trimmedComment) {
       toast({ variant: "destructive", title: "Hata", description: "Yorum boş olamaz" });
+      return;
+    }
+
+    if (trimmedComment.length > 500) {
+      toast({ variant: "destructive", title: "Hata", description: "Yorum en fazla 500 karakter olabilir" });
       return;
     }
 
@@ -127,7 +133,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
       user_id: user.id,
       movie_id: movieId || null,
       series_id: seriesId || null,
-      comment: newComment.trim(),
+      comment: trimmedComment,
       is_spoiler: isSpoiler,
     });
 

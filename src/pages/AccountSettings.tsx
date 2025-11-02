@@ -8,158 +8,100 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Mail, Lock, LogOut, User } from "lucide-react";
-import { z } from "zod";
-
-const emailSchema = z.string().email("Geçerli bir email adresi girin");
-const passwordSchema = z.string().min(6, "Şifre en az 6 karakter olmalıdır");
-const usernameSchema = z.string().min(3, "Kullanıcı adı en az 3 karakter olmalıdır").max(30, "Kullanıcı adı en fazla 30 karakter olabilir");
+import { Settings, Mail, Lock, LogOut, User, Image as ImageIcon } from "lucide-react";
 
 const AccountSettings = () => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState("https://www.hdfilmizle.life/assets/front/img/default-pp.webp");
+  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) return;
-      
-      // Check if user is admin
-      const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
-      
-      setIsAdmin(!!roleData);
-      
-      const { data } = await supabase
-        .from('profiles')
-        .select('username')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (data?.username) {
-        setCurrentUsername(data.username);
-        setUsername(data.username);
-      }
-    };
-    fetchProfile();
+    loadProfile();
+    checkAdmin();
   }, [user]);
 
-  const handleEmailChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      emailSchema.parse(newEmail);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({ variant: "destructive", title: "Hata", description: error.errors[0].message });
-        return;
-      }
-    }
-
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ email: newEmail });
-    
-    if (error) {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
-    } else {
-      toast({ title: "Başarılı", description: "Email adresiniz güncellendi. Lütfen yeni email adresinizi doğrulayın." });
-      setNewEmail("");
-    }
-    setLoading(false);
+  const checkAdmin = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+    setIsAdmin(!!data);
   };
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const loadProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("username, avatar_url")
+      .eq("user_id", user.id)
+      .maybeSingle();
     
-    try {
-      passwordSchema.parse(newPassword);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({ variant: "destructive", title: "Hata", description: error.errors[0].message });
-        return;
-      }
+    if (data) {
+      setUsername(data.username || "");
+      setAvatarUrl(data.avatar_url || "https://www.hdfilmizle.life/assets/front/img/default-pp.webp");
     }
-
-    if (newPassword !== confirmPassword) {
-      toast({ variant: "destructive", title: "Hata", description: "Şifreler eşleşmiyor" });
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    
-    if (error) {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
-    } else {
-      toast({ title: "Başarılı", description: "Şifreniz güncellendi" });
-      setNewPassword("");
-      setConfirmPassword("");
-    }
-    setLoading(false);
   };
 
-  const handleUsernameChange = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleSave = async () => {
+    if (!user) return;
+
     if (isAdmin) {
-      toast({ variant: "destructive", title: "Hata", description: "Admin kullanıcı adı değiştirilemez" });
+      toast({ 
+        variant: "destructive", 
+        title: "Uyarı", 
+        description: "Admin kullanıcı adını değiştiremezsiniz" 
+      });
       return;
-    }
-    
-    try {
-      usernameSchema.parse(username);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({ variant: "destructive", title: "Hata", description: error.errors[0].message });
-        return;
-      }
     }
 
     setLoading(true);
     
-    // Check if profile exists
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('user_id', user?.id)
-      .single();
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({ 
+        user_id: user.id, 
+        username: username.trim() 
+      });
 
-    if (existingProfile) {
-      // Update existing profile
-      const { error } = await supabase
-        .from('profiles')
-        .update({ username })
-        .eq('user_id', user?.id);
-      
-      if (error) {
-        toast({ variant: "destructive", title: "Hata", description: error.message });
-      } else {
-        toast({ title: "Başarılı", description: "Kullanıcı adınız güncellendi" });
-        setCurrentUsername(username);
-      }
+    if (error) {
+      toast({ variant: "destructive", title: "Hata", description: error.message });
     } else {
-      // Insert new profile
-      const { error } = await supabase
-        .from('profiles')
-        .insert({ user_id: user?.id, username });
-      
-      if (error) {
-        toast({ variant: "destructive", title: "Hata", description: error.message });
-      } else {
-        toast({ title: "Başarılı", description: "Kullanıcı adınız ayarlandı" });
-        setCurrentUsername(username);
-      }
+      toast({ title: "Başarılı", description: "Profil güncellendi" });
+    }
+    
+    setLoading(false);
+  };
+
+  const handleSaveAvatar = async () => {
+    if (!user || !isAdmin) {
+      toast({ 
+        variant: "destructive", 
+        title: "Hata", 
+        description: "Sadece admin profil fotoğrafı değiştirebilir" 
+      });
+      return;
+    }
+
+    setLoading(true);
+    
+    const { error } = await supabase
+      .from("profiles")
+      .upsert({ 
+        user_id: user.id, 
+        avatar_url: avatarUrl.trim() || "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"
+      });
+
+    if (error) {
+      toast({ variant: "destructive", title: "Hata", description: error.message });
+    } else {
+      toast({ title: "Başarılı", description: "Profil fotoğrafı güncellendi" });
     }
     
     setLoading(false);
@@ -178,125 +120,93 @@ const AccountSettings = () => {
   return (
     <div className="min-h-screen bg-cinema-dark">
       <Navbar />
-      <div className="container mx-auto px-4 pt-32 pb-16 max-w-2xl">
+      <div className="container mx-auto px-4 pt-24 pb-16 max-w-2xl">
         <div className="flex items-center gap-3 mb-8">
           <Settings className="w-8 h-8 text-gold" />
-          <h1 className="text-4xl font-bold text-gold gold-glow">Hesap Ayarları</h1>
+          <h1 className="text-3xl font-bold text-gold">Hesap Ayarları</h1>
         </div>
 
         <div className="space-y-6">
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Kullanıcı Adı
+                <ImageIcon className="w-5 h-5" />
+                Profil Fotoğrafı
               </CardTitle>
               <CardDescription>
-                {currentUsername ? `Mevcut kullanıcı adı: ${currentUsername}` : 'Henüz kullanıcı adı belirlenmedi'}
-                {isAdmin && <span className="block text-destructive mt-1">Admin kullanıcı adı değiştirilemez</span>}
+                {isAdmin ? "Admin olarak profil fotoğrafınızı değiştirebilirsiniz" : "Herkesin profil fotoğrafı varsayılan olarak ayarlanmıştır"}
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleUsernameChange} className="space-y-4">
+            <CardContent className="space-y-6">
+              <div className="flex items-center gap-4">
+                <img 
+                  src={avatarUrl} 
+                  alt="Profil Resmi" 
+                  className="w-20 h-20 rounded-full object-cover"
+                />
+              </div>
+
+              {isAdmin && (
                 <div className="space-y-2">
-                  <Label htmlFor="username">Kullanıcı Adı</Label>
+                  <Label htmlFor="avatar">Profil Fotoğrafı URL</Label>
                   <Input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="kullaniciadi"
+                    id="avatar"
+                    value={avatarUrl}
+                    onChange={(e) => setAvatarUrl(e.target.value)}
                     className="bg-secondary"
-                    required
-                    disabled={isAdmin}
+                    placeholder="https://example.com/avatar.jpg"
                   />
+                  <Button 
+                    onClick={handleSaveAvatar} 
+                    disabled={loading}
+                    className="bg-gold hover:bg-gold-light text-black mt-2"
+                  >
+                    {loading ? "Kaydediliyor..." : "Profil Fotoğrafını Güncelle"}
+                  </Button>
                 </div>
-                <Button 
-                  type="submit" 
-                  className="bg-gold hover:bg-gold-light text-black"
-                  disabled={loading || isAdmin}
-                >
-                  Kullanıcı Adını Güncelle
-                </Button>
-              </form>
+              )}
             </CardContent>
           </Card>
 
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Mail className="w-5 h-5" />
-                Email Değiştir
+                <User className="w-5 h-5" />
+                Profil Bilgileri
               </CardTitle>
-              <CardDescription>Mevcut email: {user.email}</CardDescription>
+              <CardDescription>
+                {isAdmin && "Admin kullanıcı adı değiştirilemez"}
+              </CardDescription>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleEmailChange} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="newEmail">Yeni Email</Label>
-                  <Input
-                    id="newEmail"
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="yeni@email.com"
-                    className="bg-secondary"
-                    required
-                  />
-                </div>
-                <Button 
-                  type="submit" 
-                  className="bg-gold hover:bg-gold-light text-black"
-                  disabled={loading}
-                >
-                  Email'i Güncelle
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-posta</Label>
+                <Input id="email" value={user?.email || ""} disabled className="bg-secondary" />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="username">Kullanıcı Adı</Label>
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={isAdmin}
+                  className="bg-secondary"
+                />
+                {isAdmin && (
+                  <p className="text-sm text-muted-foreground">
+                    Admin kullanıcı adı değiştirilemez
+                  </p>
+                )}
+              </div>
 
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Lock className="w-5 h-5" />
-                Şifre Değiştir
-              </CardTitle>
-              <CardDescription>Yeni şifrenizi girin</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handlePasswordChange} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="newPassword">Yeni Şifre</Label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="En az 6 karakter"
-                    className="bg-secondary"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Şifre Tekrar</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Şifrenizi tekrar girin"
-                    className="bg-secondary"
-                    required
-                  />
-                </div>
-                <Button 
-                  type="submit" 
-                  className="bg-gold hover:bg-gold-light text-black"
-                  disabled={loading}
-                >
-                  Şifreyi Güncelle
-                </Button>
-              </form>
+              <Button 
+                onClick={handleSave} 
+                disabled={loading || isAdmin}
+                className="bg-gold hover:bg-gold-light text-black"
+              >
+                {loading ? "Kaydediliyor..." : "Kaydet"}
+              </Button>
             </CardContent>
           </Card>
 

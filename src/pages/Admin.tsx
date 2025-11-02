@@ -8,10 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Tv, LogOut, Trash2, Plus } from "lucide-react";
+import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { categories } from "@/data/categories";
 import { z } from "zod";
+import { parseM3U } from "@/utils/m3uParser";
 
 const movieSchema = z.object({
   title: z.string().trim().min(1, "Başlık gereklidir").max(200),
@@ -54,6 +55,8 @@ const Admin = () => {
   const [series, setSeries] = useState<any[]>([]);
   const [selectedSeries, setSelectedSeries] = useState<string>("");
   const [episodes, setEpisodes] = useState<any[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [m3uFile, setM3uFile] = useState<File | null>(null);
 
   useEffect(() => {
     loadMovies();
@@ -221,6 +224,77 @@ const Admin = () => {
     }
   };
 
+  const handleM3UImport = async () => {
+    if (!m3uFile) {
+      toast({ variant: "destructive", title: "Hata", description: "Lütfen bir M3U dosyası seçin" });
+      return;
+    }
+
+    setImportLoading(true);
+    
+    try {
+      const content = await m3uFile.text();
+      const parsedMovies = parseM3U(content);
+      
+      if (parsedMovies.length === 0) {
+        toast({ variant: "destructive", title: "Hata", description: "M3U dosyasında film bulunamadı" });
+        setImportLoading(false);
+        return;
+      }
+
+      // Insert movies in batches
+      const batchSize = 100;
+      let imported = 0;
+      
+      for (let i = 0; i < parsedMovies.length; i += batchSize) {
+        const batch = parsedMovies.slice(i, i + batchSize).map(movie => ({
+          ...movie,
+          source: 'm3u',
+          imported_at: new Date().toISOString(),
+          description: null,
+          backdrop_url: null,
+          trailer_url: null,
+        }));
+
+        const { error } = await supabase.from("movies").insert(batch);
+        
+        if (error) {
+          console.error("Batch import error:", error);
+        } else {
+          imported += batch.length;
+        }
+      }
+
+      toast({ 
+        title: "Başarılı", 
+        description: `${imported} film başarıyla içe aktarıldı` 
+      });
+      
+      setM3uFile(null);
+      loadMovies();
+    } catch (error) {
+      console.error("M3U import error:", error);
+      toast({ variant: "destructive", title: "Hata", description: "M3U dosyası işlenirken hata oluştu" });
+    }
+    
+    setImportLoading(false);
+  };
+
+  const handleDeleteM3UMovies = async () => {
+    if (!confirm("M3U'dan eklenen tüm filmleri silmek istediğinizden emin misiniz?")) {
+      return;
+    }
+
+    const { error } = await supabase.from("movies").delete().eq("source", "m3u");
+    
+    if (!error) {
+      toast({ title: "Başarılı", description: "M3U filmleri silindi" });
+      loadMovies();
+    } else {
+      toast({ variant: "destructive", title: "Hata", description: error.message });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-cinema-dark p-6">
       <div className="container mx-auto max-w-7xl">
@@ -252,6 +326,52 @@ const Admin = () => {
           </TabsList>
 
           <TabsContent value="movies" className="space-y-6">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle>M3U Dosyasından Toplu Film Ekle</CardTitle>
+                <CardDescription>M3U dosyası seçin ve filmleri içe aktarın</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="m3u-file">M3U Dosyası</Label>
+                  <Input
+                    id="m3u-file"
+                    type="file"
+                    accept=".m3u,.m3u8"
+                    onChange={(e) => setM3uFile(e.target.files?.[0] || null)}
+                    className="bg-secondary"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleM3UImport}
+                    disabled={importLoading || !m3uFile}
+                    className="bg-gold hover:bg-gold-light text-black"
+                  >
+                    {importLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        İçe Aktarılıyor...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        M3U'dan İçe Aktar
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteM3UMovies}
+                    disabled={importLoading}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    M3U Filmlerini Sil
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card className="bg-card border-border">
               <CardHeader>
                 <CardTitle>Yeni Film Ekle</CardTitle>

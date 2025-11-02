@@ -156,8 +156,10 @@ export type Database = {
           description: string | null
           duration: string | null
           id: string
+          imported_at: string | null
           poster_url: string | null
           rating: number | null
+          source: string | null
           title: string
           trailer_url: string | null
           updated_at: string | null
@@ -171,8 +173,10 @@ export type Database = {
           description?: string | null
           duration?: string | null
           id?: string
+          imported_at?: string | null
           poster_url?: string | null
           rating?: number | null
+          source?: string | null
           title: string
           trailer_url?: string | null
           updated_at?: string | null
@@ -186,8 +190,10 @@ export type Database = {
           description?: string | null
           duration?: string | null
           id?: string
+          imported_at?: string | null
           poster_url?: string | null
           rating?: number | null
+          source?: string | null
           title?: string
           trailer_url?: string | null
           updated_at?: string | null
@@ -198,6 +204,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
           id: string
           updated_at: string
@@ -205,6 +212,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           id?: string
           updated_at?: string
@@ -212,6 +220,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           id?: string
           updated_at?: string

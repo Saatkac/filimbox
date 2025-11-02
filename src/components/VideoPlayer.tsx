@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings } from "lucide-react";
+import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,8 +35,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [qualities, setQualities] = useState<{ level: number; height: number }[]>([]);
-  const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [isReady, setIsReady] = useState(false);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -60,8 +58,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     const video = videoRef.current;
     const normalizedSrc = normalizeUrl(src);
     setError(null);
-
-    console.log("VideoPlayer: attempting to load", normalizedSrc);
 
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
@@ -119,62 +115,27 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
 
     try {
       if (isHLS && Hls.isSupported()) {
-        console.log("VideoPlayer: using HLS.js");
         const hls = new Hls({
+          maxBufferLength: 10,
+          maxMaxBufferLength: 20,
+          maxBufferSize: 30 * 1000 * 1000,
+          maxBufferHole: 0.3,
           enableWorker: true,
-          lowLatencyMode: true,
-          maxBufferLength: 60,
-          maxMaxBufferLength: 600,
-          maxBufferSize: 120 * 1000 * 1000,
-          maxBufferHole: 0.5,
-          highBufferWatchdogPeriod: 2,
-          nudgeOffset: 0.1,
-          nudgeMaxRetry: 5,
-          maxFragLookUpTolerance: 0.25,
+          lowLatencyMode: false,
           startLevel: -1,
-          autoStartLoad: true,
-          startPosition: -1,
-          backBufferLength: 120,
-          manifestLoadingTimeOut: 10000,
-          manifestLoadingMaxRetry: 6,
-          levelLoadingTimeOut: 10000,
-          levelLoadingMaxRetry: 6,
-          fragLoadingTimeOut: 20000,
-          fragLoadingMaxRetry: 8,
-          xhrSetup: (xhr, url) => {
-            xhr.withCredentials = false;
-          },
+          capLevelToPlayerSize: false,
         });
-        
         hlsRef.current = hls;
         hls.loadSource(normalizedSrc);
         hls.attachMedia(video);
-        
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          console.log("VideoPlayer: HLS manifest parsed successfully");
-          // Get available quality levels
-          const levels = hls.levels.map((level, index) => ({
-            level: index,
-            height: level.height
-          }));
-          setQualities(levels);
-          setCurrentQuality(hls.currentLevel);
-        });
-        
-        hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
-          setCurrentQuality(data.level);
-        });
-        
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error("VideoPlayer: HLS error", data);
+
+        hls.on(Hls.Events.ERROR, (_, data) => {
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                console.log("VideoPlayer: fatal network error, trying to recover");
                 hls.startLoad();
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
-                console.log("VideoPlayer: fatal media error, trying to recover");
                 hls.recoverMediaError();
                 break;
               default:
@@ -195,12 +156,10 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           hlsRef.current = null;
         };
       } else if (isDASH) {
-        console.log("VideoPlayer: using DASH.js");
         const player = dashjs.MediaPlayer().create();
         player.initialize(video, normalizedSrc, true);
         
         player.on('error', (e: any) => {
-          console.error("VideoPlayer: DASH error", e);
           setError("Video yüklenemedi. Lütfen daha sonra tekrar deneyin.");
         });
 
@@ -213,19 +172,15 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           player.destroy();
         };
       } else if (isMP4) {
-        console.log("VideoPlayer: using native MP4");
         video.src = normalizedSrc;
         video.load();
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        console.log("VideoPlayer: using Safari native HLS");
         video.src = normalizedSrc;
         video.load();
       } else {
-        console.error("VideoPlayer: unsupported format");
         setError("Bu video formatı desteklenmiyor.");
       }
     } catch (err) {
-      console.error("VideoPlayer: initialization error", err);
       setError("Video oynatıcı başlatılamadı.");
     }
 
@@ -249,7 +204,12 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     };
   }, [src, onProgressUpdate, initialProgress]);
 
-  // Control functions with useCallback
+  const skipTime = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.currentTime + seconds, duration));
+    }
+  };
+
   const togglePlay = useCallback(() => {
     if (videoRef.current) {
       if (isPlaying) {
@@ -264,13 +224,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     if (videoRef.current) {
       videoRef.current.playbackRate = rate;
       setPlaybackRate(rate);
-    }
-  }, []);
-
-  const changeQuality = useCallback((level: number) => {
-    if (hlsRef.current) {
-      hlsRef.current.currentLevel = level;
-      setCurrentQuality(level);
     }
   }, []);
 
@@ -341,13 +294,12 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     setIsFullscreen(!isFullscreen);
   }, [isFullscreen]);
 
-  // Keyboard controls - only when player is focused
+  // Keyboard controls
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only respond if the player container or its children have focus
       if (!container.contains(document.activeElement)) return;
       
       switch (e.key) {
@@ -355,6 +307,14 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         case 'k':
           e.preventDefault();
           togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          skipTime(-10);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skipTime(10);
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -476,6 +436,24 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
               <div className="flex items-center justify-between gap-2 md:gap-4">
                 {/* Left Side Controls */}
                 <div className="flex items-center gap-2 md:gap-3">
+                  {/* Skip Backward */}
+                  <button
+                    onClick={() => skipTime(-10)}
+                    className="text-white hover:text-gold transition-colors"
+                    title="10 saniye geri"
+                  >
+                    <SkipBack className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+
+                  {/* Skip Forward */}
+                  <button
+                    onClick={() => skipTime(10)}
+                    className="text-white hover:text-gold transition-colors"
+                    title="10 saniye ileri"
+                  >
+                    <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+
                   {/* Volume Control */}
                   <div className="hidden md:flex items-center gap-2 w-[150px] lg:w-[200px]">
                     <button
@@ -543,41 +521,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
                       ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
-
-                  {/* Quality Selection */}
-                  {qualities.length > 0 && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          className="text-white hover:text-gold hover:bg-white/10 h-8 px-2"
-                          title="Kalite"
-                        >
-                          <Settings className="w-4 h-4 md:w-5 md:h-5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-black/95 border-gold/20">
-                        <DropdownMenuLabel className="text-gold">Video Kalitesi</DropdownMenuLabel>
-                        <DropdownMenuSeparator className="bg-gold/20" />
-                        <DropdownMenuItem
-                          onClick={() => changeQuality(-1)}
-                          className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
-                        >
-                          {currentQuality === -1 && "✓ "}Otomatik
-                        </DropdownMenuItem>
-                        {qualities.map((quality) => (
-                          <DropdownMenuItem
-                            key={quality.level}
-                            onClick={() => changeQuality(quality.level)}
-                            className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
-                          >
-                            {currentQuality === quality.level && "✓ "}{quality.height}p
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
 
                   {/* Fullscreen Toggle */}
                   <button

@@ -11,22 +11,46 @@ const Index = () => {
   const [movies, setMovies] = useState<any[]>([]);
   const [series, setSeries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const ITEMS_PER_PAGE = 30;
   
-  const loadContent = useCallback(async () => {
+  const loadContent = useCallback(async (pageNum: number) => {
     setLoading(true);
+    const from = (pageNum - 1) * ITEMS_PER_PAGE;
+    const to = from + ITEMS_PER_PAGE - 1;
+    
     const [moviesData, seriesData] = await Promise.all([
-      supabase.from("movies").select("id,title,poster_url,backdrop_url,rating,year,category,description,duration").order("created_at", { ascending: false }),
-      supabase.from("series").select("id,title,poster_url,backdrop_url,rating,year,category,description").order("created_at", { ascending: false }),
+      supabase
+        .from("movies")
+        .select("id,title,poster_url,backdrop_url,rating,year,category,description,duration")
+        .order("created_at", { ascending: false })
+        .range(from, to),
+      supabase
+        .from("series")
+        .select("id,title,poster_url,backdrop_url,rating,year,category,description")
+        .order("created_at", { ascending: false })
+        .range(from, to),
     ]);
     
-    setMovies(moviesData.data || []);
-    setSeries(seriesData.data || []);
+    const newMovies = moviesData.data || [];
+    const newSeries = seriesData.data || [];
+    
+    if (pageNum === 1) {
+      setMovies(newMovies);
+      setSeries(newSeries);
+    } else {
+      setMovies(prev => [...prev, ...newMovies]);
+      setSeries(prev => [...prev, ...newSeries]);
+    }
+    
+    setHasMore(newMovies.length + newSeries.length === ITEMS_PER_PAGE);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    loadContent();
-  }, [loadContent]);
+    loadContent(1);
+  }, []);
 
   const allContent = useMemo(() => 
     [...movies, ...series.map(s => ({ ...s, isSeries: true }))],
@@ -128,19 +152,42 @@ const Index = () => {
           {selectedCategory === "Tümü" ? "Tüm İçerikler" : selectedCategory}
         </h2>
         {filteredContent.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {filteredContent.map((item) => (
-              <MovieCard
-                key={item.id}
-                id={item.id}
-                title={item.title}
-                poster={item.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
-                rating={item.rating}
-                year={item.year}
-                category={item.category}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+              {filteredContent.map((item) => (
+                <MovieCard
+                  key={item.id}
+                  id={item.id}
+                  title={item.title}
+                  poster={item.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
+                  rating={item.rating}
+                  year={item.year}
+                  category={item.category}
+                />
+              ))}
+            </div>
+            
+            {hasMore && !loading && (
+              <div className="mt-8 text-center">
+                <Button
+                  onClick={() => {
+                    const nextPage = page + 1;
+                    setPage(nextPage);
+                    loadContent(nextPage);
+                  }}
+                  className="bg-gold hover:bg-gold-light text-black"
+                >
+                  Daha Fazla Yükle
+                </Button>
+              </div>
+            )}
+            
+            {loading && page > 1 && (
+              <div className="mt-8 text-center text-gold">
+                Yükleniyor...
+              </div>
+            )}
+          </>
         ) : (
           <div className="text-center py-16">
             <p className="text-xl text-muted-foreground">
