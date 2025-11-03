@@ -58,11 +58,42 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     return out;
   };
 
+  // Build fallback candidates for HLS URLs (handle various host patterns)
+  const getHlsCandidates = (u: string): string[] => {
+    const url = u.trim();
+    const list: string[] = [];
+    const push = (x: string) => { if (!list.includes(x)) list.push(x); };
+
+    if (/\.m3u8(\?|$)/i.test(url)) return [url];
+
+    // Trailing slash like /vs/ttxxxx/ -> try common playlist names
+    if (url.endsWith('/')) {
+      push(url + 'index.m3u8');
+      push(url + 'master.m3u8');
+      push(url + '720.m3u8');
+    }
+
+    // "/main" endings
+    if (/\/main\/?$/i.test(url)) {
+      push(url.replace(/\/main\/?$/i, '/main/index.m3u8'));
+      push(url.replace(/\/main\/?$/i, '/main/master.m3u8'));
+      push(url.replace(/\/main\/?$/i, '/main/720.m3u8'));
+    }
+
+    // "master" without extension
+    if (/\/master$/i.test(url) && !/\.m3u8(\?|$)/i.test(url)) {
+      push(url + '.m3u8');
+    }
+
+    return list.length ? list : [url];
+  };
+
   useEffect(() => {
     if (!videoRef.current || !src) return;
 
     const video = videoRef.current;
     const normalizedSrc = normalizeUrl(src);
+    let nativeErrorHandler: ((e: Event) => void) | null = null;
     setError(null);
 
     // Video event listeners
@@ -121,36 +152,54 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
 
     try {
       if (isHLS && Hls.isSupported()) {
-        const hls = new Hls({
-          maxBufferLength: 10,
-          maxMaxBufferLength: 20,
-          maxBufferSize: 30 * 1000 * 1000,
-          maxBufferHole: 0.3,
-          enableWorker: true,
-          lowLatencyMode: false,
-          startLevel: -1,
-          capLevelToPlayerSize: false,
-        });
-        hlsRef.current = hls;
-        hls.loadSource(normalizedSrc);
-        hls.attachMedia(video);
+        const candidates = getHlsCandidates(normalizedSrc);
+        let current = 0;
+        let hls: Hls | null = null;
 
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError();
-                break;
-              default:
-                setError("Video yüklenemedi. Lütfen daha sonra tekrar deneyin.");
-                hls.destroy();
-                break;
-            }
+        const initHls = (url: string) => {
+          if (hls) {
+            try { hls.destroy(); } catch {}
           }
-        });
+          hls = new Hls({
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            maxBufferSize: 60 * 1000 * 1000,
+            backBufferLength: 60,
+            enableWorker: true,
+            lowLatencyMode: false,
+            startLevel: -1,
+            capLevelToPlayerSize: true,
+          });
+          hlsRef.current = hls;
+          hls.loadSource(url);
+          hls.attachMedia(video);
+
+          hls.on(Hls.Events.ERROR, (_, data) => {
+            // Retry next candidate on manifest/network errors
+            if (data.fatal) {
+              if (
+                data.type === Hls.ErrorTypes.NETWORK_ERROR ||
+                data.type === Hls.ErrorTypes.MEDIA_ERROR
+              ) {
+                // Try next candidate for manifest/network issues
+                const next = candidates[++current];
+                if (next) {
+                  initHls(next);
+                } else {
+                  setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+                  try { hls?.destroy(); } catch {}
+                  hlsRef.current = null;
+                }
+              } else {
+                setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+                try { hls?.destroy(); } catch {}
+                hlsRef.current = null;
+              }
+            }
+          });
+        };
+
+        initHls(candidates[0]);
 
         return () => {
           video.removeEventListener('timeupdate', handleTimeUpdate);
@@ -158,7 +207,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           video.removeEventListener('play', handlePlay);
           video.removeEventListener('pause', handlePause);
           video.removeEventListener('canplay', handleCanPlay);
-          hls.destroy();
+          try { hls?.destroy(); } catch {}
           hlsRef.current = null;
         };
       } else if (isDASH) {
@@ -181,8 +230,21 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         video.src = normalizedSrc;
         video.load();
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = normalizedSrc;
-        video.load();
+        const candidates = getHlsCandidates(normalizedSrc);
+        let idx = 0;
+        const setNativeSrc = (u: string) => { video.src = u; video.load(); };
+        nativeErrorHandler = () => {
+          idx++;
+          const next = candidates[idx];
+          if (next) {
+            setNativeSrc(next);
+          } else {
+            setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+            if (nativeErrorHandler) video.removeEventListener('error', nativeErrorHandler as any);
+          }
+        };
+        video.addEventListener('error', nativeErrorHandler as any);
+        setNativeSrc(candidates[0]);
       } else {
         setError("Bu video formatı desteklenmiyor.");
       }
@@ -190,24 +252,25 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       setError("Video oynatıcı başlatılamadı.");
     }
 
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('canplay', handleCanPlay);
-      
-      // Clear progress update interval
-      if (progressUpdateInterval.current) {
-        clearInterval(progressUpdateInterval.current);
-        progressUpdateInterval.current = null;
-      }
-      
-      // Save final progress
-      if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
-        onProgressUpdate(video.currentTime, video.duration);
-      }
-    };
+      return () => {
+        video.removeEventListener('timeupdate', handleTimeUpdate);
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        video.removeEventListener('play', handlePlay);
+        video.removeEventListener('pause', handlePause);
+        video.removeEventListener('canplay', handleCanPlay);
+        if (nativeErrorHandler) { try { video.removeEventListener('error', nativeErrorHandler as any); } catch {} }
+        
+        // Clear progress update interval
+        if (progressUpdateInterval.current) {
+          clearInterval(progressUpdateInterval.current);
+          progressUpdateInterval.current = null;
+        }
+        
+        // Save final progress
+        if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
+          onProgressUpdate(video.currentTime, video.duration);
+        }
+      };
   }, [src, onProgressUpdate, initialProgress]);
 
   const skipTime = (seconds: number) => {
