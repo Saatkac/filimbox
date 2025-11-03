@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,12 +9,14 @@ const Index = () => {
   const [movies, setMovies] = useState<any[]>([]);
   const [series, setSeries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const ITEMS_PER_PAGE = 30;
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   
   const loadContent = useCallback(async (pageNum: number) => {
-    setLoading(true);
+    if (pageNum === 1) setLoading(true); else setLoadingMore(true);
     const from = (pageNum - 1) * ITEMS_PER_PAGE;
     const to = from + ITEMS_PER_PAGE - 1;
     
@@ -42,13 +44,28 @@ const Index = () => {
       setSeries(prev => [...prev, ...newSeries]);
     }
     
-    setHasMore(newMovies.length === ITEMS_PER_PAGE || newSeries.length === ITEMS_PER_PAGE);
-    setLoading(false);
+    setHasMore(newMovies.length === ITEMS_PER_PAGE);
+    if (pageNum === 1) setLoading(false); else setLoadingMore(false);
   }, []);
 
   useEffect(() => {
     loadContent(1);
   }, []);
+
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver((entries) => {
+      const first = entries[0];
+      if (first.isIntersecting && hasMore && !loading && !loadingMore) {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        loadContent(nextPage);
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, page, loadContent]);
 
   const allContent = useMemo(() => movies, [movies]);
   
@@ -137,25 +154,9 @@ const Index = () => {
               ))}
             </div>
             
-            {hasMore && !loading && (
-              <div className="mt-8 text-center">
-                <Button
-                  onClick={() => {
-                    const nextPage = page + 1;
-                    setPage(nextPage);
-                    loadContent(nextPage);
-                  }}
-                  className="bg-gold hover:bg-gold-light text-black"
-                >
-                  Daha Fazla Yükle
-                </Button>
-              </div>
-            )}
-            
-            {loading && page > 1 && (
-              <div className="mt-8 text-center text-gold">
-                Yükleniyor...
-              </div>
+            <div ref={loadMoreRef} className="h-10" />
+            {loadingMore && (
+              <div className="mt-6 text-center text-gold">Yükleniyor...</div>
             )}
           </>
         ) : (
