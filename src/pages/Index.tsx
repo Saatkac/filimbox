@@ -42,7 +42,7 @@ const Index = () => {
       setSeries(prev => [...prev, ...newSeries]);
     }
     
-    setHasMore(newMovies.length + newSeries.length === ITEMS_PER_PAGE);
+    setHasMore(newMovies.length === ITEMS_PER_PAGE || newSeries.length === ITEMS_PER_PAGE);
     setLoading(false);
   }, []);
 
@@ -50,10 +50,7 @@ const Index = () => {
     loadContent(1);
   }, []);
 
-  const allContent = useMemo(() => 
-    [...movies, ...series.map(s => ({ ...s, isSeries: true }))],
-    [movies, series]
-  );
+  const allContent = useMemo(() => movies, [movies]);
   
   const filteredContent = useMemo(() => allContent, [allContent]);
 
@@ -123,7 +120,7 @@ const Index = () => {
 
 
       <section className="container mx-auto px-4 pb-16">
-        <h2 className="text-2xl font-bold mb-6">Tüm İçerikler</h2>
+        <h2 className="text-2xl font-bold mb-6">Tüm Filmler</h2>
         {filteredContent.length > 0 ? (
           <>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
