@@ -27,9 +27,14 @@ export function parseM3U(content: string): ParsedMovie[] {
       const rawTitle = titleMatch ? titleMatch[1].trim() : '';
       
       // Get the video URL from the next line
-      const videoUrl = lines[i + 1] || '';
+      let videoUrl = lines[i + 1] || '';
       
       if (!videoUrl || videoUrl.startsWith('#')) continue;
+      
+      // Fix incomplete URLs - add index.m3u8 if URL ends with /
+      if (videoUrl.endsWith('/')) {
+        videoUrl = videoUrl + 'index.m3u8';
+      }
       
       // Extract year from title
       const yearMatch = rawTitle.match(/\((\d{4})\)/);

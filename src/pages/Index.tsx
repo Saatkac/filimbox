@@ -4,10 +4,8 @@ import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Play, TrendingUp } from "lucide-react";
-import { categories } from "@/data/categories";
 
 const Index = () => {
-  const [selectedCategory, setSelectedCategory] = useState("Tümü");
   const [movies, setMovies] = useState<any[]>([]);
   const [series, setSeries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,12 +55,7 @@ const Index = () => {
     [movies, series]
   );
   
-  const filteredContent = useMemo(() => 
-    selectedCategory === "Tümü" 
-      ? allContent 
-      : allContent.filter(item => item.category === selectedCategory),
-    [selectedCategory, allContent]
-  );
+  const filteredContent = useMemo(() => allContent, [allContent]);
 
   const featuredContent = useMemo(() => allContent[0], [allContent]);
 
@@ -128,29 +121,9 @@ const Index = () => {
         </section>
       )}
 
-      <section className="container mx-auto px-4 py-8">
-        <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
-          {categories.map((category) => (
-            <Button
-              key={category}
-              variant={selectedCategory === category ? "default" : "secondary"}
-              className={
-                selectedCategory === category
-                  ? "bg-gold hover:bg-gold-light text-black font-medium whitespace-nowrap"
-                  : "whitespace-nowrap"
-              }
-              onClick={() => setSelectedCategory(category)}
-            >
-              {category}
-            </Button>
-          ))}
-        </div>
-      </section>
 
       <section className="container mx-auto px-4 pb-16">
-        <h2 className="text-2xl font-bold mb-6">
-          {selectedCategory === "Tümü" ? "Tüm İçerikler" : selectedCategory}
-        </h2>
+        <h2 className="text-2xl font-bold mb-6">Tüm İçerikler</h2>
         {filteredContent.length > 0 ? (
           <>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
