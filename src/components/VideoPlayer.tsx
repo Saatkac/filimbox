@@ -125,18 +125,22 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     };
     const handleCanPlay = () => setIsReady(true);
 
-    // Web Audio API for volume boost
+    // Web Audio API for volume boost (guard against cross-origin errors)
     if (!audioContextRef.current) {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const source = audioContext.createMediaElementSource(video);
-      const gainNode = audioContext.createGain();
-      
-      source.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      audioContextRef.current = audioContext;
-      gainNodeRef.current = gainNode;
-      gainNode.gain.value = volume;
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const source = audioContext.createMediaElementSource(video);
+        const gainNode = audioContext.createGain();
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        audioContextRef.current = audioContext;
+        gainNodeRef.current = gainNode;
+        gainNode.gain.value = volume;
+      } catch (e) {
+        // Disable boost gracefully if not allowed by CORS
+        audioContextRef.current = null;
+        gainNodeRef.current = null;
+      }
     }
     
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -175,25 +179,43 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           hls.attachMedia(video);
 
           hls.on(Hls.Events.ERROR, (_, data) => {
-            // Retry next candidate on manifest/network errors
+            // Retry strategy: recover once, then try next candidate
+            // Track local counters via closure
+            (hls as any)._networkRetry = (hls as any)._networkRetry ?? 0;
+            (hls as any)._mediaRecover = (hls as any)._mediaRecover ?? 0;
+
             if (data.fatal) {
-              if (
-                data.type === Hls.ErrorTypes.NETWORK_ERROR ||
-                data.type === Hls.ErrorTypes.MEDIA_ERROR
-              ) {
-                // Try next candidate for manifest/network issues
-                const next = candidates[++current];
-                if (next) {
-                  initHls(next);
+              if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                if ((hls as any)._networkRetry < 1) {
+                  (hls as any)._networkRetry++;
+                  hls.startLoad();
                 } else {
+                  const next = candidates[++current];
+                  if (next) initHls(next); else {
+                    setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+                    try { hls?.destroy(); } catch {}
+                    hlsRef.current = null;
+                  }
+                }
+              } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                if ((hls as any)._mediaRecover < 1) {
+                  (hls as any)._mediaRecover++;
+                  hls.recoverMediaError();
+                } else {
+                  const next = candidates[++current];
+                  if (next) initHls(next); else {
+                    setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+                    try { hls?.destroy(); } catch {}
+                    hlsRef.current = null;
+                  }
+                }
+              } else {
+                const next = candidates[++current];
+                if (next) initHls(next); else {
                   setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
                   try { hls?.destroy(); } catch {}
                   hlsRef.current = null;
                 }
-              } else {
-                setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
-                try { hls?.destroy(); } catch {}
-                hlsRef.current = null;
               }
             }
           });
