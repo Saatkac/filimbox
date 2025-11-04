@@ -104,6 +104,19 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       if (initialProgress > 0 && video.duration > 0) {
         video.currentTime = Math.min(initialProgress, video.duration - 10);
       }
+      // Prefer Turkish audio track for native HLS (Safari)
+      try {
+        const aTracks = (video as any).audioTracks as any;
+        if (aTracks && aTracks.length) {
+          for (let i = 0; i < aTracks.length; i++) {
+            const t = aTracks[i];
+            const lang = (t.language || '').toLowerCase();
+            const label = (t.label || '').toLowerCase();
+            const isTr = lang === 'tr' || label.includes('türk');
+            aTracks[i].enabled = isTr;
+          }
+        }
+      } catch {}
     };
     const handlePlay = () => {
       setIsPlaying(true);
