@@ -185,7 +185,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
 
     try {
       if (isHLS && Hls.isSupported()) {
-        const candidates = getHlsCandidates(normalizedSrc);
+        const rawCandidates = getHlsCandidates(normalizedSrc);
+        const candidates = rawCandidates.map(toProxied);
         let current = 0;
         let hls: Hls | null = null;
 
@@ -206,6 +207,10 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           hlsRef.current = hls;
           hls.loadSource(url);
           hls.attachMedia(video);
+
+          // Auto-select Turkish audio track when available
+          hls.on(Hls.Events.MANIFEST_PARSED, () => selectTurkish(hls!));
+          hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => selectTurkish(hls!));
 
           hls.on(Hls.Events.ERROR, (_, data) => {
             // Retry strategy: recover once, then try next candidate

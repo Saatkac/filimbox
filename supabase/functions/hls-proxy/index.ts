@@ -41,10 +41,10 @@ function rewriteM3U8(content: string, originalUrl: string, proxyBase: string) {
   const absolutize = (u: string) => new URL(u, base).href;
 
   // 1) Rewrite tag URIs (KEY, MEDIA, MAP, I-FRAME-STREAM-INF, etc.)
-  let rewritten = content.replace(/URI=\\\"([^\\\"]+)\\\"/gi, (_m, p1) => {
+  let rewritten = content.replace(/URI="([^"]+)"/gi, (_m, p1) => {
     try {
       const abs = absolutize(p1);
-      return `URI=\\\"${proxify(proxyBase, abs)}\\\"`;
+      return `URI="${proxify(proxyBase, abs)}"`;
     } catch {
       return _m;
     }
@@ -79,14 +79,17 @@ serve(async (req: Request) => {
   const proxyBase = `${urlObj.origin}${urlObj.pathname}`;
 
   try {
+    const src = new URL(sourceUrl);
     const upstream = await fetch(sourceUrl, {
       method: 'GET',
       headers: {
         // Forward important headers (range for partial content)
         'Range': req.headers.get('Range') ?? '',
-        'User-Agent': req.headers.get('User-Agent') ?? 'Lovable-HLS-Proxy',
-        'Referer': req.headers.get('Referer') ?? '',
-        'Origin': req.headers.get('Origin') ?? '',
+        // Spoof a common UA if missing
+        'User-Agent': req.headers.get('User-Agent') ?? 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        // Force upstream-friendly headers
+        'Referer': `${src.origin}/`,
+        'Origin': src.origin,
         'Accept': req.headers.get('Accept') ?? '*/*',
         'Accept-Encoding': req.headers.get('Accept-Encoding') ?? '',
         'Accept-Language': req.headers.get('Accept-Language') ?? '',
