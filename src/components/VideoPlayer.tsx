@@ -136,12 +136,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     let nativeErrorHandler: ((e: Event) => void) | null = null;
     setError(null);
 
-    // If custom player is disabled, use native browser player
-    if (!useCustomPlayer) {
-      video.src = normalizedSrc;
-      video.load();
-      return;
-    }
+    // Eğer özel player kapalıysa yine de HLS oynatma motorunu (Hls.js) kullanabiliriz;
+    // sadece özel kontrol katmanını gizleyip native kontrolleri gösteriyoruz.
 
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
@@ -217,7 +213,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     try {
       if (isHLS && Hls.isSupported()) {
         const rawCandidates = getHlsCandidates(normalizedSrc);
-        const candidates = rawCandidates.map(toProxied);
+        const candidates = [...rawCandidates.map(toProxied), ...rawCandidates];
         let current = 0;
         let hls: Hls | null = null;
 
@@ -317,7 +313,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         video.src = normalizedSrc;
         video.load();
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        const candidates = getHlsCandidates(normalizedSrc).map(toProxied);
+        const rawNative = getHlsCandidates(normalizedSrc);
+        const candidates = [...rawNative.map(toProxied), ...rawNative];
         let idx = 0;
         const setNativeSrc = (u: string) => { video.src = u; video.load(); };
         nativeErrorHandler = () => {
@@ -544,7 +541,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           </video>
 
           {/* Loading Indicator */}
-          {!isReady && (
+          {useCustomPlayer && !isReady && (
+            
             <div className="absolute inset-0 flex items-center justify-center bg-black/50">
               <div className="text-gold text-lg">Video hazırlanıyor...</div>
             </div>
