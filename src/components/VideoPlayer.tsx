@@ -13,6 +13,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 
 interface VideoPlayerProps {
@@ -40,6 +42,28 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
+  const [useCustomPlayer, setUseCustomPlayer] = useState(true);
+  const { user } = useAuth();
+
+  // Load user's player preference
+  useEffect(() => {
+    const loadPlayerPreference = async () => {
+      if (!user) {
+        setUseCustomPlayer(true);
+        return;
+      }
+      const { data } = await supabase
+        .from("profiles")
+        .select("use_custom_player")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      
+      if (data) {
+        setUseCustomPlayer(data.use_custom_player ?? true);
+      }
+    };
+    loadPlayerPreference();
+  }, [user]);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -111,6 +135,13 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     const normalizedSrc = normalizeUrl(src);
     let nativeErrorHandler: ((e: Event) => void) | null = null;
     setError(null);
+
+    // If custom player is disabled, use native browser player
+    if (!useCustomPlayer) {
+      video.src = normalizedSrc;
+      video.load();
+      return;
+    }
 
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
@@ -327,7 +358,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           onProgressUpdate(video.currentTime, video.duration);
         }
       };
-  }, [src, onProgressUpdate, initialProgress]);
+  }, [src, onProgressUpdate, initialProgress, useCustomPlayer]);
 
   const skipTime = (seconds: number) => {
     if (videoRef.current) {
@@ -507,6 +538,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             preload="auto"
             playsInline
             onClick={togglePlay}
+            controls={!useCustomPlayer}
           >
             Tarayıcınız video oynatmayı desteklemiyor.
           </video>
@@ -518,7 +550,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             </div>
           )}
 
-          {/* Custom Controls */}
+          {/* Custom Controls - only show when custom player is enabled */}
+          {useCustomPlayer && (
           <div 
             className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${
               showControls ? 'opacity-100' : 'opacity-0'
@@ -663,6 +696,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
               </div>
             </div>
           </div>
+          )}
         </>
       )}
     </div>

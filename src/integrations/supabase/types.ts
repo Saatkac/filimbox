@@ -208,6 +208,7 @@ export type Database = {
           created_at: string
           id: string
           updated_at: string
+          use_custom_player: boolean | null
           user_id: string
           username: string | null
         }
@@ -216,6 +217,7 @@ export type Database = {
           created_at?: string
           id?: string
           updated_at?: string
+          use_custom_player?: boolean | null
           user_id: string
           username?: string | null
         }
@@ -224,6 +226,7 @@ export type Database = {
           created_at?: string
           id?: string
           updated_at?: string
+          use_custom_player?: boolean | null
           user_id?: string
           username?: string | null
         }
