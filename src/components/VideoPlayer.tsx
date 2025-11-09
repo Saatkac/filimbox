@@ -112,11 +112,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     return list.length ? list : [url];
 };
 
-  // HLS proxy for CORS + manifest rewrite
-  const proxyBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hls-proxy`;
-  const isProxied = (u: string) => u.includes('/functions/v1/hls-proxy');
-  const toProxied = (u: string) => (isProxied(u) ? u : `${proxyBase}?url=${encodeURIComponent(u)}`);
-
   // Prefer Turkish audio track when available (Hls.js)
   const selectTurkish = (hls: Hls) => {
     try {
@@ -212,8 +207,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
 
     try {
       if (isHLS && Hls.isSupported()) {
-        const rawCandidates = getHlsCandidates(normalizedSrc);
-        const candidates = [...rawCandidates.map(toProxied), ...rawCandidates];
+        const candidates = getHlsCandidates(normalizedSrc);
         let current = 0;
         let hls: Hls | null = null;
 
@@ -313,8 +307,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         video.src = normalizedSrc;
         video.load();
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        const rawNative = getHlsCandidates(normalizedSrc);
-        const candidates = [...rawNative.map(toProxied), ...rawNative];
+        const candidates = getHlsCandidates(normalizedSrc);
         let idx = 0;
         const setNativeSrc = (u: string) => { video.src = u; video.load(); };
         nativeErrorHandler = () => {
