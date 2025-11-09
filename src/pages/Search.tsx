@@ -74,6 +74,7 @@ const Search = () => {
                 rating={item.rating}
                 year={item.year}
                 category={item.category}
+                duration={item.duration}
               />
             ))}
           </div>

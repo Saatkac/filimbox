@@ -10,9 +10,10 @@ interface MovieCardProps {
   rating: number;
   year: number;
   category: string;
+  duration?: string | null;
 }
 
-const MovieCard = ({ id, title, poster, rating, year, category }: MovieCardProps) => {
+const MovieCard = ({ id, title, poster, rating, year, category, duration }: MovieCardProps) => {
   return (
     <Link to={`/movie/${id}`} className="group">
       <div className="relative overflow-hidden rounded-lg bg-card hover-lift">
@@ -35,12 +36,13 @@ const MovieCard = ({ id, title, poster, rating, year, category }: MovieCardProps
         
         <div className="p-3">
           <h3 className="font-semibold text-foreground line-clamp-1 mb-1">{title}</h3>
-          <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <div className="flex items-center justify-between text-sm text-muted-foreground flex-wrap gap-1">
             <span className="flex items-center gap-1">
               <Star className="w-3 h-3 fill-gold text-gold" />
               {rating.toFixed(1)}
             </span>
             <span>{year}</span>
+            {duration && <span className="text-xs">{duration}</span>}
             <span className="text-gold text-xs">{category}</span>
           </div>
         </div>

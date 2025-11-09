@@ -28,7 +28,7 @@ const Favorites = () => {
         id,
         movie_id,
         series_id,
-        movies (id, title, poster_url, rating, year, category),
+        movies (id, title, poster_url, rating, year, category, duration),
         series (id, title, poster_url, rating, year, category)
       `)
       .eq("user_id", user.id)
@@ -94,6 +94,7 @@ const Favorites = () => {
                 rating={item.rating}
                 year={item.year}
                 category={item.category}
+                duration={item.duration}
               />
             ))}
           </div>

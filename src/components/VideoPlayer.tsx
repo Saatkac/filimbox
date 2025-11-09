@@ -42,7 +42,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
-  const [useCustomPlayer, setUseCustomPlayer] = useState(true);
+  const [useCustomPlayer, setUseCustomPlayer] = useState<boolean | null>(null);
   const { user } = useAuth();
 
   // Load user's player preference
@@ -60,6 +60,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       
       if (data) {
         setUseCustomPlayer(data.use_custom_player ?? true);
+      } else {
+        setUseCustomPlayer(true);
       }
     };
     loadPlayerPreference();
@@ -124,7 +126,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   };
 
   useEffect(() => {
-    if (!videoRef.current || !src) return;
+    if (!videoRef.current || !src || useCustomPlayer === null) return;
 
     const video = videoRef.current;
     const normalizedSrc = normalizeUrl(src);
@@ -541,8 +543,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             </div>
           )}
 
-          {/* Custom Controls - only show when custom player is enabled */}
-          {useCustomPlayer && (
+          {/* Custom Controls - only show when custom player is enabled and loaded */}
+          {useCustomPlayer === true && (
           <div 
             className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${
               showControls ? 'opacity-100' : 'opacity-0'
