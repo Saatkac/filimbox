@@ -157,8 +157,27 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
     setError(null);
     setIsReady(false);
 
-    // Eğer özel player kapalıysa yine de HLS oynatma motorunu (Hls.js) kullanabiliriz;
-    // sadece özel kontrol katmanını gizleyip native kontrolleri gösteriyoruz.
+    // Player kapalıyken: HLS.js kullanmadan direkt tarayıcının native desteğini kullan
+    if (useCustomPlayer === false) {
+      const handleNativeError = () => {
+        const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
+        if (isHLS) {
+          setError(`Video yüklenemedi. Ham M3U8 linkini yeni sekmede açmayı deneyin: <a href="${normalizedSrc}" target="_blank" rel="noopener noreferrer" class="underline text-gold">Yeni Sekmede Aç</a>`);
+        } else {
+          setError("Video yüklenemedi.");
+        }
+      };
+      video.addEventListener('error', handleNativeError);
+      video.addEventListener('canplay', () => setIsReady(true));
+      
+      // Direkt native oynatıcıyla aç
+      video.src = normalizedSrc;
+      video.load();
+      
+      return () => {
+        video.removeEventListener('error', handleNativeError);
+      };
+    }
 
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
@@ -545,7 +564,7 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
       {error ? (
         <Alert variant="destructive" className="m-4">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription dangerouslySetInnerHTML={{ __html: error }} />
         </Alert>
       ) : (
         <>

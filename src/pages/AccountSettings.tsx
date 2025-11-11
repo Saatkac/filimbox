@@ -150,7 +150,9 @@ const AccountSettings = () => {
       toast({ variant: "destructive", title: "Hata", description: error.message });
     } else {
       setUseCustomPlayer(checked);
-      toast({ title: "Başarılı", description: "Player ayarı güncellendi" });
+      setCookie("use_custom_player", checked ? "1" : "0");
+      toast({ title: "Başarılı", description: "Player ayarı güncellendi. Sayfa yenileniyor..." });
+      setTimeout(() => window.location.reload(), 800);
     }
     setLoading(false);
   };
