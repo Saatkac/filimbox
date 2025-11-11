@@ -11,6 +11,24 @@ import { useToast } from "@/hooks/use-toast";
 import { Settings, Mail, Lock, LogOut, User, Image as ImageIcon, Play } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
+// Cookie helpers (shared with player)
+const setCookie = (name: string, value: string, days = 365) => {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+};
+const getCookie = (name: string): string | null => {
+  const parts = document.cookie ? document.cookie.split('; ') : [];
+  for (const part of parts) {
+    const eqIndex = part.indexOf('=');
+    if (eqIndex > -1) {
+      const key = part.substring(0, eqIndex);
+      const val = part.substring(eqIndex + 1);
+      if (key === name) return decodeURIComponent(val);
+    }
+  }
+  return null;
+};
+
 const AccountSettings = () => {
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("https://www.hdfilmizle.life/assets/front/img/default-pp.webp");

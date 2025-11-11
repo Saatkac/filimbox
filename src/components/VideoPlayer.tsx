@@ -16,6 +16,23 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
+// Cookie helpers
+const getCookie = (name: string): string | null => {
+  const parts = document.cookie ? document.cookie.split('; ') : [];
+  for (const part of parts) {
+    const eqIndex = part.indexOf('=');
+    if (eqIndex > -1) {
+      const key = part.substring(0, eqIndex);
+      const val = part.substring(eqIndex + 1);
+      if (key === name) return decodeURIComponent(val);
+    }
+  }
+  return null;
+};
+const setCookie = (name: string, value: string, days = 365) => {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+};
 
 interface VideoPlayerProps {
   src: string;
@@ -42,14 +59,20 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
-  const [useCustomPlayer, setUseCustomPlayer] = useState<boolean | null>(null);
+const cookiePref = (() => {
+  const v = getCookie("use_custom_player");
+  if (v === "1") return true;
+  if (v === "0") return false;
+  return true;
+})();
+const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
   const { user } = useAuth();
 
   // Load user's player preference
   useEffect(() => {
     const loadPlayerPreference = async () => {
       if (!user) {
-        setUseCustomPlayer(true);
+        // Anonymous users: keep cookie-based preference
         return;
       }
       const { data } = await supabase
@@ -59,9 +82,9 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         .maybeSingle();
       
       if (data) {
-        setUseCustomPlayer(data.use_custom_player ?? true);
-      } else {
-        setUseCustomPlayer(true);
+        const pref = data.use_custom_player ?? true;
+        setUseCustomPlayer(pref);
+        setCookie("use_custom_player", pref ? "1" : "0");
       }
     };
     loadPlayerPreference();
@@ -126,12 +149,13 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   };
 
   useEffect(() => {
-    if (!videoRef.current || !src || useCustomPlayer === null) return;
+    if (!videoRef.current || !src) return;
 
     const video = videoRef.current;
     const normalizedSrc = normalizeUrl(src);
     let nativeErrorHandler: ((e: Event) => void) | null = null;
     setError(null);
+    setIsReady(false);
 
     // Eğer özel player kapalıysa yine de HLS oynatma motorunu (Hls.js) kullanabiliriz;
     // sadece özel kontrol katmanını gizleyip native kontrolleri gösteriyoruz.
@@ -231,8 +255,11 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           hls.loadSource(url);
           hls.attachMedia(video);
 
-          // Auto-select Turkish audio track when available
-          hls.on(Hls.Events.MANIFEST_PARSED, () => selectTurkish(hls!));
+          // Auto-select Turkish audio track when available and mark ready
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            selectTurkish(hls!);
+            setIsReady(true);
+          });
           hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => selectTurkish(hls!));
 
           hls.on(Hls.Events.ERROR, (_, data) => {
@@ -530,13 +557,13 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             preload="auto"
             playsInline
             onClick={togglePlay}
-            controls={!useCustomPlayer}
+            controls={useCustomPlayer === false}
           >
             Tarayıcınız video oynatmayı desteklemiyor.
           </video>
 
           {/* Loading Indicator */}
-          {useCustomPlayer && !isReady && (
+          {useCustomPlayer === true && !isReady && (
             
             <div className="absolute inset-0 flex items-center justify-center bg-black/50">
               <div className="text-gold text-lg">Video hazırlanıyor...</div>
