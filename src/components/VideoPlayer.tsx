@@ -157,6 +157,12 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
     setError(null);
     setIsReady(false);
 
+    // Player kapalıyken harici oynatıcı kullan (button ile)
+    if (useCustomPlayer === false) {
+      setIsReady(true);
+      return;
+    }
+
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
     const handleLoadedMetadata = () => {
@@ -546,25 +552,40 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
         </Alert>
       ) : (
         <>
-          <video
-            ref={videoRef}
-            poster={poster}
-            className="w-full h-full max-h-[100vh] object-contain"
-            crossOrigin="anonymous"
-            preload="auto"
-            playsInline
-            onClick={togglePlay}
-            controls={useCustomPlayer === false}
-          >
-            Tarayıcınız video oynatmayı desteklemiyor.
-          </video>
-
-          {/* Loading Indicator */}
-          {useCustomPlayer === true && !isReady && (
-            
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-              <div className="text-gold text-lg">Video hazırlanıyor...</div>
+          {useCustomPlayer === false ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black">
+              <div className="text-center space-y-4">
+                <div className="text-gold text-lg mb-2">Videoyu harici pencerede oynat</div>
+                <Button
+                  onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
+                  className="bg-gold hover:bg-gold-light text-black px-8 py-6 text-lg"
+                >
+                  <Play className="w-6 h-6 mr-2" />
+                  Videoyu Aç
+                </Button>
+              </div>
             </div>
+          ) : (
+            <>
+              <video
+                ref={videoRef}
+                poster={poster}
+                className="w-full h-full max-h-[100vh] object-contain"
+                crossOrigin="anonymous"
+                preload="auto"
+                playsInline
+                onClick={togglePlay}
+              >
+                Tarayıcınız video oynatmayı desteklemiyor.
+              </video>
+
+              {/* Loading Indicator */}
+              {!isReady && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                  <div className="text-gold text-lg">Video hazırlanıyor...</div>
+                </div>
+              )}
+            </>
           )}
 
           {/* Custom Controls - only show when custom player is enabled and loaded */}
