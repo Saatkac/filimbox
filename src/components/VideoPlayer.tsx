@@ -557,7 +557,43 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
               <div className="text-center space-y-4">
                 <div className="text-gold text-lg mb-2">Videoyu harici pencerede oynat</div>
                 <Button
-                  onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
+                  onClick={() => {
+                    const newWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
+                    if (newWindow) {
+                      newWindow.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                          <meta charset="UTF-8">
+                          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                          <title>Video Player</title>
+                          <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+                          <style>
+                            * { margin: 0; padding: 0; box-sizing: border-box; }
+                            body { background: #000; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+                            video { width: 100%; max-width: 100vw; max-height: 100vh; }
+                          </style>
+                        </head>
+                        <body>
+                          <video id="video" controls autoplay></video>
+                          <script>
+                            const video = document.getElementById('video');
+                            const videoSrc = '${src}';
+                            
+                            if (Hls.isSupported() && videoSrc.includes('.m3u8')) {
+                              const hls = new Hls();
+                              hls.loadSource(videoSrc);
+                              hls.attachMedia(video);
+                            } else {
+                              video.src = videoSrc;
+                            }
+                          </script>
+                        </body>
+                        </html>
+                      `);
+                      newWindow.document.close();
+                    }
+                  }}
                   className="bg-gold hover:bg-gold-light text-black px-8 py-6 text-lg"
                 >
                   <Play className="w-6 h-6 mr-2" />
