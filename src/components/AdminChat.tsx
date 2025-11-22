@@ -3,15 +3,27 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Send, Bot, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 type Message = { role: 'user' | 'assistant'; content: string };
 
+const AI_MODELS = [
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (Varsayılan)', description: 'Hızlı ve dengeli' },
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'En güçlü Gemini' },
+  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', description: 'Yeni nesil Gemini' },
+  { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'En hızlı ve ucuz' },
+  { id: 'openai/gpt-5', name: 'GPT-5', description: 'OpenAI en güçlü' },
+  { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', description: 'Maliyet-performans dengesi' },
+  { id: 'openai/gpt-5-nano', name: 'GPT-5 Nano', description: 'Hız ve maliyet tasarrufu' },
+] as const;
+
 export default function AdminChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>('google/gemini-2.5-flash');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -35,7 +47,7 @@ export default function AdminChat() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ messages: newMessages, model: selectedModel }),
       });
 
       if (resp.status === 429) {
@@ -144,10 +156,27 @@ export default function AdminChat() {
   return (
     <Card className="bg-card border-border h-[600px] flex flex-col">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="w-5 h-5 text-gold" />
-          AI Asistan
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="w-5 h-5 text-gold" />
+            AI Asistan
+          </CardTitle>
+          <Select value={selectedModel} onValueChange={setSelectedModel}>
+            <SelectTrigger className="w-[240px] bg-secondary">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {AI_MODELS.map((model) => (
+                <SelectItem key={model.id} value={model.id}>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{model.name}</span>
+                    <span className="text-xs text-muted-foreground">{model.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col gap-4 p-0">
         <ScrollArea ref={scrollRef} className="flex-1 px-6">
