@@ -68,7 +68,29 @@ export default function AdminChat() {
         return;
       }
 
-      if (!resp.ok || !resp.body) {
+      if (!resp.ok) {
+        throw new Error('İstek başarısız');
+      }
+
+      // Check if it's an image model (non-streaming response)
+      const isImageModel = selectedModel.includes('image');
+      
+      if (isImageModel) {
+        const data = await resp.json();
+        const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        const content = data.choices?.[0]?.message?.content || 'Görsel oluşturuldu.';
+        
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content, 
+          imageUrl 
+        }]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Handle streaming for text models
+      if (!resp.body) {
         throw new Error('Stream başlatılamadı');
       }
 
