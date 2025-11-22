@@ -27,12 +27,13 @@ serve(async (req) => {
         },
         ...messages,
       ],
-      stream: true,
     };
 
-    // Add modalities for image models
+    // Image models don't use streaming, they return JSON directly
     if (isImageModel) {
       requestBody.modalities = ["image", "text"];
+    } else {
+      requestBody.stream = true;
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -42,6 +43,40 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit aşıldı, lütfen daha sonra tekrar deneyin." }), {
+          status: 429,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "Ödeme gerekli, lütfen Lovable AI workspace'inize kredi ekleyin." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const t = await response.text();
+      console.error("AI gateway error:", response.status, t);
+      return new Response(JSON.stringify({ error: "AI gateway hatası" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // If it's an image model, return JSON directly
+    if (isImageModel) {
+      const data = await response.json();
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Otherwise, stream the response
+    return new Response(response.body, {
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
 
     if (!response.ok) {
