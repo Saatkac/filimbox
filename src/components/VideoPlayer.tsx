@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import Hls from "hls.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
@@ -12,9 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// HLS.js loaded from CDN
-declare const Hls: any;
-
 interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -25,7 +23,7 @@ interface VideoPlayerProps {
 const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const hlsRef = useRef<any>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -37,15 +35,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const [playbackRate, setPlaybackRate] = useState(1);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Clean and normalize video URL
-  const normalizeUrl = (url: string) => {
-    if (!url) return url;
-    const cleanUrl = url.trim();
-    console.log('[VideoPlayer] Using URL:', cleanUrl);
-    return cleanUrl;
-  };
-
-  // Format time for display
   const formatTime = (seconds: number) => {
     if (!isFinite(seconds)) return "0:00";
     const h = Math.floor(seconds / 3600);
@@ -58,16 +47,14 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   };
 
   useEffect(() => {
-    if (!videoRef.current || !src) {
+    const video = videoRef.current;
+    if (!video || !src) {
       console.log('[VideoPlayer] No video element or src');
       return;
     }
 
-    const video = videoRef.current;
-    const videoUrl = normalizeUrl(src);
+    console.log('[VideoPlayer] Initializing with src:', src);
     setError(null);
-
-    console.log('[VideoPlayer] Initializing video player');
 
     // Event handlers
     const handleTimeUpdate = () => {
@@ -80,16 +67,28 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     const handleLoadedMetadata = () => {
       console.log('[VideoPlayer] Metadata loaded, duration:', video.duration);
       setDuration(video.duration);
-      if (initialProgress > 0) {
+      if (initialProgress > 0 && video.duration > 0) {
         video.currentTime = Math.min(initialProgress, video.duration - 1);
       }
     };
     
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleError = (e: Event) => {
-      console.error('[VideoPlayer] Video error:', e);
-      setError("Video yüklenemedi. Lütfen başka bir video deneyin.");
+    const handlePlay = () => {
+      console.log('[VideoPlayer] Playing');
+      setIsPlaying(true);
+    };
+    
+    const handlePause = () => {
+      console.log('[VideoPlayer] Paused');
+      setIsPlaying(false);
+    };
+    
+    const handleVideoError = (e: Event) => {
+      console.error('[VideoPlayer] Video element error:', e);
+      const videoEl = e.target as HTMLVideoElement;
+      if (videoEl.error) {
+        console.error('[VideoPlayer] Video error code:', videoEl.error.code, videoEl.error.message);
+      }
+      setError("Video yüklenemedi. Lütfen tekrar deneyin.");
     };
 
     // Attach event listeners
@@ -97,93 +96,115 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
-    video.addEventListener('error', handleError);
+    video.addEventListener('error', handleVideoError);
 
-    // Initialize HLS player
-    const isHLS = videoUrl.includes('.m3u8');
+    // Check if source is HLS
+    const isHLS = src.includes('.m3u8');
     
-    // Check if HLS.js is loaded
-    if (typeof Hls === 'undefined') {
-      console.log('[VideoPlayer] HLS.js not loaded yet, waiting...');
-      setError('Video oynatıcı yükleniyor...');
-      setTimeout(() => {
-        if (videoRef.current) {
-          const newEvent = new Event('retry');
-          videoRef.current.dispatchEvent(newEvent);
-        }
-      }, 500);
-      return;
-    }
-    
-    if (isHLS && Hls.isSupported()) {
-      console.log('[VideoPlayer] Initializing HLS for:', videoUrl);
+    if (isHLS) {
+      console.log('[VideoPlayer] HLS detected');
       
-      const hls = new Hls({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000,
-        maxBufferHole: 0.5,
-      });
-
-      hls.loadSource(videoUrl);
-      hls.attachMedia(video);
-      hlsRef.current = hls;
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('[VideoPlayer] HLS manifest loaded successfully');
-      });
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error('[VideoPlayer] HLS error:', data.type, data.details, data);
+      if (Hls.isSupported()) {
+        console.log('[VideoPlayer] HLS.js is supported, initializing...');
         
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[VideoPlayer] Network error, attempting recovery...');
-              // Try to reload after a short delay
-              setTimeout(() => {
-                if (hlsRef.current) {
-                  console.log('[VideoPlayer] Retrying with startLoad()');
-                  hlsRef.current.startLoad();
-                }
-              }, 1000);
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[VideoPlayer] Media error, attempting recovery...');
-              hls.recoverMediaError();
-              break;
-            default:
-              console.error('[VideoPlayer] Fatal error, cannot recover');
-              setError("Video sunucusuna erişilemiyor. Bu video şu anda izlenemiyor.");
-              hls.destroy();
-              break;
-          }
+        // Destroy existing HLS instance
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
         }
-      });
-    } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari)
-      console.log('[VideoPlayer] Using native HLS for:', videoUrl);
-      video.src = videoUrl;
+
+        // Create new HLS instance
+        const hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 90,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferHole: 0.5,
+          manifestLoadingTimeOut: 10000,
+          manifestLoadingMaxRetry: 3,
+          levelLoadingTimeOut: 10000,
+          levelLoadingMaxRetry: 3,
+          fragLoadingTimeOut: 20000,
+          fragLoadingMaxRetry: 3,
+        });
+
+        hlsRef.current = hls;
+
+        // HLS event handlers
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log('[VideoPlayer] HLS manifest parsed successfully');
+        });
+
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          console.log('[VideoPlayer] HLS media attached');
+          hls.loadSource(src);
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('[VideoPlayer] HLS error:', data);
+          
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.log('[VideoPlayer] Fatal network error, trying to recover...');
+                setError("Ağ hatası. Video yükleniyor...");
+                setTimeout(() => {
+                  if (hlsRef.current) {
+                    hlsRef.current.startLoad();
+                  }
+                }, 1000);
+                break;
+              
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('[VideoPlayer] Fatal media error, trying to recover...');
+                setError("Medya hatası. Düzeltiliyor...");
+                hls.recoverMediaError();
+                break;
+              
+              default:
+                console.error('[VideoPlayer] Fatal error, cannot recover');
+                setError("Video yüklenemiyor. Lütfen başka bir video deneyin.");
+                hls.destroy();
+                break;
+            }
+          } else {
+            console.warn('[VideoPlayer] Non-fatal HLS error:', data.details);
+          }
+        });
+
+        // Attach media and load source
+        hls.attachMedia(video);
+        
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        // Native HLS support (Safari, iOS)
+        console.log('[VideoPlayer] Using native HLS support');
+        video.src = src;
+        video.load();
+      } else {
+        console.error('[VideoPlayer] HLS not supported in this browser');
+        setError("Bu tarayıcı HLS videolarını desteklemiyor.");
+      }
     } else {
-      // Direct playback
-      console.log('[VideoPlayer] Using direct playback for:', videoUrl);
-      video.src = videoUrl;
+      // Direct video playback (MP4, WebM, etc.)
+      console.log('[VideoPlayer] Direct video playback');
+      video.src = src;
+      video.load();
     }
 
     // Cleanup
     return () => {
       console.log('[VideoPlayer] Cleaning up');
+      
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
-      video.removeEventListener('error', handleError);
+      video.removeEventListener('error', handleVideoError);
       
       if (hlsRef.current) {
+        console.log('[VideoPlayer] Destroying HLS instance');
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
@@ -195,7 +216,10 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       if (isPlaying) {
         videoRef.current.pause();
       } else {
-        videoRef.current.play().catch(e => console.error('[VideoPlayer] Play failed:', e));
+        videoRef.current.play().catch(e => {
+          console.error('[VideoPlayer] Play failed:', e);
+          setError("Video oynatılamıyor. Lütfen tekrar deneyin.");
+        });
       }
     }
   }, [isPlaying]);
