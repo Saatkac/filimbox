@@ -8,12 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2 } from "lucide-react";
+import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { categories } from "@/data/categories";
 import { z } from "zod";
 import { parseM3U } from "@/utils/m3uParser";
 import MovieCard from "@/components/MovieCard";
+import AdminChat from "@/components/AdminChat";
 
 const movieSchema = z.object({
   title: z.string().trim().min(1, "Başlık gereklidir").max(200),
@@ -361,8 +362,12 @@ const Admin = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="sandbox" className="space-y-6">
+        <Tabs defaultValue="chat" className="space-y-6">
           <TabsList className="bg-card">
+            <TabsTrigger value="chat">
+              <MessageSquare className="w-4 h-4 mr-2" />
+              AI Asistan
+            </TabsTrigger>
             <TabsTrigger value="sandbox">
               <Upload className="w-4 h-4 mr-2" />
               Sandbox Test
@@ -380,6 +385,10 @@ const Admin = () => {
               Bölümler
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="chat">
+            <AdminChat />
+          </TabsContent>
 
           <TabsContent value="sandbox" className="space-y-6">
             <Card className="bg-card border-border">

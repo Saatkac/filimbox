@@ -223,131 +223,45 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
 
     try {
       if (isHLS && Hls.isSupported()) {
-        const candidates = getHlsCandidates(normalizedSrc);
-        let current = 0;
-        let hls: Hls | null = null;
+        let hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: false,
+          xhrSetup: function(xhr) {
+            xhr.withCredentials = false;
+          },
+        });
+        
+        hlsRef.current = hls;
+        hls.loadSource(normalizedSrc);
+        hls.attachMedia(video);
 
-        const initHls = (url: string) => {
-          if (hls) {
-            try { hls.destroy(); } catch {}
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (loadingTimeout) {
+            clearTimeout(loadingTimeout);
+            loadingTimeout = null;
           }
-          
-          hls = new Hls({
-            maxBufferLength: 30,
-            maxMaxBufferLength: 60,
-            maxBufferSize: 60 * 1000 * 1000,
-            backBufferLength: 60,
-            enableWorker: true,
-            lowLatencyMode: false,
-            startLevel: -1,
-            capLevelToPlayerSize: true,
-            liveSyncDurationCount: 3,
-            liveMaxLatencyDurationCount: Infinity,
-            xhrSetup: function(xhr, url) {
-              xhr.withCredentials = false;
-              xhr.responseType = 'arraybuffer';
-            },
-            enableSoftwareAES: true,
-            manifestLoadingTimeOut: 20000,
-            manifestLoadingMaxRetry: 4,
-            levelLoadingTimeOut: 20000,
-            levelLoadingMaxRetry: 4,
-            fragLoadingTimeOut: 30000,
-            fragLoadingMaxRetry: 6,
-          });
-          hlsRef.current = hls;
-          hls.loadSource(url);
-          hls.attachMedia(video);
+          setIsReady(true);
+          console.log('[VideoPlayer] HLS ready to play');
+          // Auto play after manifest is ready
+          video.play().catch(e => console.log('Autoplay prevented:', e));
+        });
 
-          // Auto-select Turkish audio track when available and mark ready
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            selectTurkish(hls!);
-            
-            // Force VOD mode if playlist type is VOD
-            const levels = hls!.levels;
-            if (levels && levels.length > 0) {
-              levels.forEach((level: any) => {
-                if (level.details) {
-                  // Force VOD type, not LIVE
-                  level.details.live = false;
-                  level.details.type = 'VOD';
-                }
-              });
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          console.error('[VideoPlayer] HLS Error:', data.type, data.details);
+          if (data.fatal) {
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              console.log('[VideoPlayer] Network error, retrying...');
+              hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              console.log('[VideoPlayer] Media error, recovering...');
+              hls.recoverMediaError();
+            } else {
+              setError("Video yüklenemedi. Lütfen sayfayı yenileyin.");
+              hls.destroy();
             }
-            
-            if (loadingTimeout) {
-              clearTimeout(loadingTimeout);
-              loadingTimeout = null;
-            }
-            setIsReady(true);
-            console.log('[VideoPlayer] HLS manifest parsed and ready');
-          });
-          hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => selectTurkish(hls!));
-
-          // Force VOD on every level load
-          hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
-            if (data.details) {
-              data.details.live = false;
-              data.details.type = 'VOD';
-            }
-          });
-
-          hls.on(Hls.Events.ERROR, (_, data) => {
-            console.error('[VideoPlayer] HLS Error:', data);
-            // Retry strategy: recover once, then try next candidate
-            // Track local counters via closure
-            (hls as any)._networkRetry = (hls as any)._networkRetry ?? 0;
-            (hls as any)._mediaRecover = (hls as any)._mediaRecover ?? 0;
-
-            if (data.fatal) {
-              if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                if ((hls as any)._networkRetry < 2) {
-                  (hls as any)._networkRetry++;
-                  console.log(`[VideoPlayer] Network error, retrying... (${(hls as any)._networkRetry}/2)`);
-                  hls.startLoad();
-                } else {
-                  const next = candidates[++current];
-                  if (next) {
-                    console.log('[VideoPlayer] Trying next candidate URL:', next);
-                    initHls(next);
-                  } else {
-                    setError("Video yüklenemedi. Sunucu erişim hatası.");
-                    try { hls?.destroy(); } catch {}
-                    hlsRef.current = null;
-                  }
-                }
-              } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                if ((hls as any)._mediaRecover < 2) {
-                  (hls as any)._mediaRecover++;
-                  console.log(`[VideoPlayer] Media error, recovering... (${(hls as any)._mediaRecover}/2)`);
-                  hls.recoverMediaError();
-                } else {
-                  const next = candidates[++current];
-                  if (next) {
-                    console.log('[VideoPlayer] Trying next candidate URL:', next);
-                    initHls(next);
-                  } else {
-                    setError("Video oynatma hatası. Lütfen farklı bir içerik deneyin.");
-                    try { hls?.destroy(); } catch {}
-                    hlsRef.current = null;
-                  }
-                }
-              } else {
-                const next = candidates[++current];
-                if (next) {
-                  console.log('[VideoPlayer] Fatal error, trying next candidate:', next);
-                  initHls(next);
-                } else {
-                  setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
-                  try { hls?.destroy(); } catch {}
-                  hlsRef.current = null;
-                }
-              }
-            }
-          });
-        };
-
-        initHls(candidates[0]);
+          }
+        });
 
         return () => {
           if (loadingTimeout) clearTimeout(loadingTimeout);
@@ -356,8 +270,10 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           video.removeEventListener('play', handlePlay);
           video.removeEventListener('pause', handlePause);
           video.removeEventListener('canplay', handleCanPlay);
-          try { hls?.destroy(); } catch {}
-          hlsRef.current = null;
+          if (hls) {
+            hls.destroy();
+            hlsRef.current = null;
+          }
         };
       } else if (isDASH) {
         const player = dashjs.MediaPlayer().create();
