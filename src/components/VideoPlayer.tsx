@@ -59,36 +59,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
-const cookiePref = (() => {
-  const v = getCookie("use_custom_player");
-  if (v === "1") return true;
-  if (v === "0") return false;
-  return true;
-})();
-const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
   const { user } = useAuth();
-
-  // Load user's player preference
-  useEffect(() => {
-    const loadPlayerPreference = async () => {
-      if (!user) {
-        // Anonymous users: keep cookie-based preference
-        return;
-      }
-      const { data } = await supabase
-        .from("profiles")
-        .select("use_custom_player")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      
-      if (data) {
-        const pref = data.use_custom_player ?? true;
-        setUseCustomPlayer(pref);
-        setCookie("use_custom_player", pref ? "1" : "0");
-      }
-    };
-    loadPlayerPreference();
-  }, [user]);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -156,12 +127,6 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
     let nativeErrorHandler: ((e: Event) => void) | null = null;
     setError(null);
     setIsReady(false);
-
-    // Player kapalıyken harici oynatıcı kullan (button ile)
-    if (useCustomPlayer === false) {
-      setIsReady(true);
-      return;
-    }
 
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
@@ -380,7 +345,7 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
           onProgressUpdate(video.currentTime, video.duration);
         }
       };
-  }, [src, onProgressUpdate, initialProgress, useCustomPlayer]);
+  }, [src, onProgressUpdate, initialProgress]);
 
   const skipTime = (seconds: number) => {
     if (videoRef.current) {
@@ -552,81 +517,27 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
         </Alert>
       ) : (
         <>
-          {useCustomPlayer === false ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-black">
-              <div className="text-center space-y-4">
-                <div className="text-gold text-lg mb-2">Videoyu harici pencerede oynat</div>
-                <Button
-                  onClick={() => {
-                    const newWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
-                    if (newWindow) {
-                      newWindow.document.write(`
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                          <meta charset="UTF-8">
-                          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                          <title>Video Player</title>
-                          <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-                          <style>
-                            * { margin: 0; padding: 0; box-sizing: border-box; }
-                            body { background: #000; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-                            video { width: 100%; max-width: 100vw; max-height: 100vh; }
-                          </style>
-                        </head>
-                        <body>
-                          <video id="video" controls autoplay></video>
-                          <script>
-                            const video = document.getElementById('video');
-                            const videoSrc = '${src}';
-                            
-                            if (Hls.isSupported() && videoSrc.includes('.m3u8')) {
-                              const hls = new Hls();
-                              hls.loadSource(videoSrc);
-                              hls.attachMedia(video);
-                            } else {
-                              video.src = videoSrc;
-                            }
-                          </script>
-                        </body>
-                        </html>
-                      `);
-                      newWindow.document.close();
-                    }
-                  }}
-                  className="bg-gold hover:bg-gold-light text-black px-8 py-6 text-lg"
-                >
-                  <Play className="w-6 h-6 mr-2" />
-                  Videoyu Aç
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <video
-                ref={videoRef}
-                poster={poster}
-                className="w-full h-full max-h-[100vh] object-contain"
-                crossOrigin="anonymous"
-                preload="auto"
-                playsInline
-                onClick={togglePlay}
-              >
-                Tarayıcınız video oynatmayı desteklemiyor.
-              </video>
+          <video
+            ref={videoRef}
+            poster={poster}
+            className="w-full h-full max-h-[100vh] object-contain"
+            crossOrigin="anonymous"
+            preload="auto"
+            playsInline
+            onClick={togglePlay}
+          >
+            Tarayıcınız video oynatmayı desteklemiyor.
+          </video>
 
-              {/* Loading Indicator */}
-              {!isReady && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                  <div className="text-gold text-lg">Video hazırlanıyor...</div>
-                </div>
-              )}
-            </>
+          {/* Loading Indicator */}
+          {!isReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <div className="text-gold text-lg">Video hazırlanıyor...</div>
+            </div>
           )}
 
-          {/* Custom Controls - only show when custom player is enabled and loaded */}
-          {useCustomPlayer === true && (
-          <div 
+          {/* Custom Controls */}
+          <div
             className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${
               showControls ? 'opacity-100' : 'opacity-0'
             }`}
@@ -770,7 +681,6 @@ const [useCustomPlayer, setUseCustomPlayer] = useState<boolean>(cookiePref);
               </div>
             </div>
           </div>
-          )}
         </>
       )}
     </div>

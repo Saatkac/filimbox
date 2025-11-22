@@ -8,8 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Mail, Lock, LogOut, User, Image as ImageIcon, Play } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
+import { Settings, Mail, Lock, LogOut, User, Image as ImageIcon } from "lucide-react";
 
 // Cookie helpers (shared with player)
 const setCookie = (name: string, value: string, days = 365) => {
@@ -37,7 +36,6 @@ const AccountSettings = () => {
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
-  const [useCustomPlayer, setUseCustomPlayer] = useState(true);
 
   useEffect(() => {
     loadProfile();
@@ -59,14 +57,13 @@ const AccountSettings = () => {
     if (!user) return;
     const { data } = await supabase
       .from("profiles")
-      .select("username, avatar_url, use_custom_player")
+      .select("username, avatar_url")
       .eq("user_id", user.id)
       .maybeSingle();
     
     if (data) {
       setUsername(data.username || "");
       setAvatarUrl(data.avatar_url || "https://www.hdfilmizle.life/assets/front/img/default-pp.webp");
-      setUseCustomPlayer(data.use_custom_player ?? true);
     }
   };
 
@@ -132,28 +129,6 @@ const AccountSettings = () => {
       toast({ title: "Başarılı", description: "Profil fotoğrafı güncellendi" });
     }
     
-    setLoading(false);
-  };
-
-  const handlePlayerToggle = async (checked: boolean) => {
-    if (!user) return;
-    
-    setLoading(true);
-    const { error } = await supabase
-      .from("profiles")
-      .upsert({ 
-        user_id: user.id, 
-        use_custom_player: checked
-      }, { onConflict: 'user_id' });
-
-    if (error) {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
-    } else {
-      setUseCustomPlayer(checked);
-      setCookie("use_custom_player", checked ? "1" : "0");
-      toast({ title: "Başarılı", description: "Player ayarı güncellendi. Sayfa yenileniyor..." });
-      setTimeout(() => window.location.reload(), 800);
-    }
     setLoading(false);
   };
 
@@ -257,34 +232,6 @@ const AccountSettings = () => {
               >
                 {loading ? "Kaydediliyor..." : "Kaydet"}
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Play className="w-5 h-5" />
-                Video Player Ayarları
-              </CardTitle>
-              <CardDescription>
-                Özel player'ı kapatırsanız tarayıcınızın varsayılan player'ı kullanılır
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="custom-player" className="flex flex-col gap-1">
-                  <span>Özel Video Player</span>
-                  <span className="text-sm text-muted-foreground font-normal">
-                    Gelişmiş kontroller ve ses ayarları
-                  </span>
-                </Label>
-                <Switch
-                  id="custom-player"
-                  checked={useCustomPlayer}
-                  onCheckedChange={handlePlayerToggle}
-                  disabled={loading}
-                />
-              </div>
             </CardContent>
           </Card>
 

@@ -42,14 +42,22 @@ export function parseM3U(content: string): ParsedMovie[] {
       
       // Clean title
       let title = rawTitle
-        .replace(/\(\d{4}\)/g, '')
+        .replace(/\(\d{4}\)/g, '') // Remove years in parentheses
         .replace(/\s+/g, ' ')
         .trim();
+      
+      // Remove leading numbers (e.g., "175. Oblivion" -> "Oblivion")
+      title = title.replace(/^\d+\.\s*/, '');
       
       // Remove extra metadata from title
       const titleParts = title.split('-');
       if (titleParts.length > 1) {
         title = titleParts[0].trim();
+      }
+      
+      // Skip invalid titles that look like file names or IDs
+      if (/^\d+[,_]\d+[,_]\d+_\.jpg/i.test(title) || title.endsWith('_.jpg"') || title.includes('_.jpg" group')) {
+        continue;
       }
       
       // Normalize category

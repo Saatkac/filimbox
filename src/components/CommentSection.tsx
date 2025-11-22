@@ -214,7 +214,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
           <p className="text-muted-foreground text-center py-8">Henüz yorum yapılmamış. İlk yorumu siz yapın!</p>
         ) : (
           comments.map((comment) => (
-            <Card key={comment.id} className={`bg-card border-border ${comment.isAdmin ? 'border-destructive/50' : ''}`}>
+            <Card key={comment.id} className={`bg-card border-border ${comment.isAdmin ? 'border-red-500' : ''}`}>
               <CardContent className="pt-6">
                 {comment.is_spoiler && (
                   <div className="flex items-center gap-2 mb-3 text-destructive">
@@ -231,7 +231,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`font-medium ${comment.isAdmin ? 'text-destructive' : 'text-foreground'}`}>
+                      <span className={`font-medium ${comment.isAdmin ? 'text-red-500' : 'text-foreground'}`}>
                         {comment.profiles?.username || "Anonim Kullanıcı"}
                       </span>
                       <span className="text-muted-foreground">•</span>
@@ -242,7 +242,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
                         })}
                       </span>
                     </div>
-                    <p className={`whitespace-pre-wrap ${comment.isAdmin ? 'text-destructive font-semibold' : 'text-foreground'}`}>
+                    <p className={`whitespace-pre-wrap ${comment.isAdmin ? 'text-red-500 font-semibold' : 'text-foreground'}`}>
                       {comment.comment}
                     </p>
                   </div>
