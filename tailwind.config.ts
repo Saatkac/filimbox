@@ -21,6 +21,9 @@ export default {
           DEFAULT: 'hsl(var(--gold))',
           light: 'hsl(var(--gold-light))',
         },
+        admin: {
+          red: 'hsl(var(--admin-red))',
+        },
         cinema: {
           dark: 'hsl(var(--cinema-dark))',
           card: 'hsl(var(--cinema-card))',
