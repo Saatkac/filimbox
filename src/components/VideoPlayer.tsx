@@ -38,19 +38,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   // Clean and normalize video URL
   const normalizeUrl = (url: string) => {
     if (!url) return url;
-    let cleanUrl = url.trim();
-    
-    // Remove problematic parameters
-    try {
-      const urlObj = new URL(cleanUrl);
-      urlObj.searchParams.delete('vt');
-      urlObj.searchParams.delete('utm_source');
-      urlObj.searchParams.delete('utm_medium');
-      cleanUrl = urlObj.toString();
-    } catch (e) {
-      console.warn('[VideoPlayer] URL cleanup failed:', e);
-    }
-    
+    const cleanUrl = url.trim();
     console.log('[VideoPlayer] Using URL:', cleanUrl);
     return cleanUrl;
   };
@@ -137,7 +125,13 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               console.log('[VideoPlayer] Network error, attempting recovery...');
-              hls.startLoad();
+              // Try to reload after a short delay
+              setTimeout(() => {
+                if (hlsRef.current) {
+                  console.log('[VideoPlayer] Retrying with startLoad()');
+                  hlsRef.current.startLoad();
+                }
+              }, 1000);
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               console.log('[VideoPlayer] Media error, attempting recovery...');
@@ -145,7 +139,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
               break;
             default:
               console.error('[VideoPlayer] Fatal error, cannot recover');
-              setError("Video oynatılamadı. Lütfen daha sonra tekrar deneyin.");
+              setError("Video sunucusuna erişilemiyor. Bu video şu anda izlenemiyor.");
               hls.destroy();
               break;
           }
