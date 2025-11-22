@@ -69,6 +69,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const normalizeUrl = (u: string) => {
     if (!u) return u;
     let out = u.trim();
+    console.log('[VideoPlayer] normalizeUrl input:', out);
+    
     // Decode HTML entities
     out = out.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
     // Fix missing protocol
@@ -77,12 +79,14 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     
     // Special handling for vidmody.com - use HLS proxy and master.m3u8
     if (out.includes('vidmody.com')) {
+      console.log('[VideoPlayer] Detected vidmody URL, processing...');
       // Extract base URL and IMDB ID, use master.m3u8
       const match = out.match(/(https?:\/\/[^/]+\/mm\/tt\d+)/i);
       if (match) {
         const masterUrl = match[1] + '/master.m3u8';
         // Route through HLS proxy to handle .gif extensions
-        const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hls-proxy?url=${encodeURIComponent(masterUrl)}`;
+        const proxyUrl = `https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy?url=${encodeURIComponent(masterUrl)}`;
+        console.log('[VideoPlayer] Proxying vidmody through:', proxyUrl);
         return proxyUrl;
       }
     }
@@ -93,6 +97,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       if (/\/main\/?$/i.test(out)) out = out.replace(/\/main\/?$/i, '/main/index.m3u8');
       if (/\/master$/i.test(out)) out = out + '.m3u8';
     }
+    
+    console.log('[VideoPlayer] normalizeUrl output:', out);
     return out;
   };
 
