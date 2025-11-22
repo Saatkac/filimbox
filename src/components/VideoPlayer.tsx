@@ -37,12 +37,15 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const [playbackRate, setPlaybackRate] = useState(1);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Clean and normalize video URL
+  // Clean and normalize video URL via proxy
   const normalizeUrl = (url: string) => {
     if (!url) return url;
     const cleanUrl = url.trim();
-    console.log('[VideoPlayer] Using URL:', cleanUrl);
-    return cleanUrl;
+    
+    // Use video-stream-proxy edge function
+    const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/video-stream-proxy?url=${encodeURIComponent(cleanUrl)}`;
+    console.log('[VideoPlayer] Using proxied URL:', proxyUrl);
+    return proxyUrl;
   };
 
   // Format time for display
