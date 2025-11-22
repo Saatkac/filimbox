@@ -54,6 +54,17 @@ export function parseM3U(content: string): ParsedMovie[] {
         continue;
       }
       
+      // Skip base64/binary strings (very long alphanumeric strings without spaces)
+      if (title.length > 100 && !/\s/.test(title)) {
+        continue;
+      }
+      
+      // Skip titles that are mostly random characters (less than 30% letters)
+      const letterCount = (title.match(/[a-zA-ZçğıöşüÇĞİÖŞÜ]/g) || []).length;
+      if (title.length > 20 && letterCount / title.length < 0.3) {
+        continue;
+      }
+      
       // Normalize category
       if (category.includes('ANIMASYON') || category.includes('COCUK')) {
         category = 'Animasyon';
