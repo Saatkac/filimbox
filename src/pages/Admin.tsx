@@ -57,6 +57,9 @@ const Admin = () => {
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [importLoading, setImportLoading] = useState(false);
   const [m3uFile, setM3uFile] = useState<File | null>(null);
+  const [sandboxM3uFile, setSandboxM3uFile] = useState<File | null>(null);
+  const [sandboxParsed, setSandboxParsed] = useState<any[]>([]);
+  const [sandboxLoading, setSandboxLoading] = useState(false);
 
   useEffect(() => {
     loadMovies();
@@ -295,6 +298,37 @@ const Admin = () => {
     }
   };
 
+  const handleSandboxParse = async () => {
+    if (!sandboxM3uFile) {
+      toast({ variant: "destructive", title: "Hata", description: "Lütfen bir M3U dosyası seçin" });
+      return;
+    }
+
+    setSandboxLoading(true);
+    
+    try {
+      const content = await sandboxM3uFile.text();
+      const parsedMovies = parseM3U(content);
+      
+      if (parsedMovies.length === 0) {
+        toast({ variant: "destructive", title: "Hata", description: "M3U dosyasında film bulunamadı" });
+        setSandboxLoading(false);
+        return;
+      }
+
+      setSandboxParsed(parsedMovies);
+      toast({ 
+        title: "Başarılı", 
+        description: `${parsedMovies.length} film parse edildi` 
+      });
+    } catch (error) {
+      console.error("M3U parse error:", error);
+      toast({ variant: "destructive", title: "Hata", description: "M3U dosyası işlenirken hata oluştu" });
+    }
+    
+    setSandboxLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-cinema-dark p-6">
       <div className="container mx-auto max-w-7xl">
@@ -309,8 +343,12 @@ const Admin = () => {
           </Button>
         </div>
 
-        <Tabs defaultValue="movies" className="space-y-6">
+        <Tabs defaultValue="sandbox" className="space-y-6">
           <TabsList className="bg-card">
+            <TabsTrigger value="sandbox">
+              <Upload className="w-4 h-4 mr-2" />
+              Sandbox Test
+            </TabsTrigger>
             <TabsTrigger value="movies">
               <Film className="w-4 h-4 mr-2" />
               Filmler
@@ -324,6 +362,112 @@ const Admin = () => {
               Bölümler
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="sandbox" className="space-y-6">
+            <Card className="bg-card border-border">
+              <CardHeader>
+                <CardTitle>🧪 M3U Sandbox Test</CardTitle>
+                <CardDescription>
+                  M3U dosyanızı yükleyin ve içeriği kontrol edin. Veritabanına eklemeden önce filmleri test edin.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sandbox-m3u-file">M3U Dosyası</Label>
+                  <Input
+                    id="sandbox-m3u-file"
+                    type="file"
+                    accept=".m3u,.m3u8"
+                    onChange={(e) => {
+                      setSandboxM3uFile(e.target.files?.[0] || null);
+                      setSandboxParsed([]);
+                    }}
+                    className="bg-secondary"
+                  />
+                </div>
+                <Button
+                  onClick={handleSandboxParse}
+                  disabled={sandboxLoading || !sandboxM3uFile}
+                  className="bg-gold hover:bg-gold-light text-black"
+                >
+                  {sandboxLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Parse Ediliyor...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4 mr-2" />
+                      Dosyayı Parse Et
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {sandboxParsed.length > 0 && (
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle>Parse Sonuçları ({sandboxParsed.length} film)</CardTitle>
+                  <CardDescription>
+                    İlk 50 film gösteriliyor. Kategorilere göre dağılım ve örnek filmler aşağıda.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Category Statistics */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {Object.entries(
+                      sandboxParsed.reduce((acc: any, movie) => {
+                        acc[movie.category] = (acc[movie.category] || 0) + 1;
+                        return acc;
+                      }, {})
+                    )
+                      .sort(([, a]: any, [, b]: any) => b - a)
+                      .slice(0, 8)
+                      .map(([category, count]: any) => (
+                        <div key={category} className="bg-secondary p-4 rounded-lg">
+                          <div className="text-2xl font-bold text-gold">{count}</div>
+                          <div className="text-sm text-muted-foreground">{category}</div>
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Sample Movies */}
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-lg">Örnek Filmler (İlk 50)</h3>
+                    <div className="max-h-[600px] overflow-y-auto space-y-2">
+                      {sandboxParsed.slice(0, 50).map((movie, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-secondary p-4 rounded-lg flex items-start gap-4"
+                        >
+                          {movie.poster_url && (
+                            <img
+                              src={movie.poster_url}
+                              alt={movie.title}
+                              className="w-16 h-24 object-cover rounded"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          )}
+                          <div className="flex-1 space-y-1">
+                            <div className="font-semibold">{movie.title}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {movie.category} • {movie.year || 'Yıl yok'}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {movie.video_url}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
 
           <TabsContent value="movies" className="space-y-6">
             <Card className="bg-card border-border">
