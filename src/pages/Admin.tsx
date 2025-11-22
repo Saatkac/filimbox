@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { categories } from "@/data/categories";
 import { z } from "zod";
 import { parseM3U } from "@/utils/m3uParser";
+import MovieCard from "@/components/MovieCard";
 
 const movieSchema = z.object({
   title: z.string().trim().min(1, "Başlık gereklidir").max(200),
@@ -453,14 +454,39 @@ const Admin = () => {
                           )}
                           <div className="flex-1 space-y-1">
                             <div className="font-semibold">{movie.title}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {movie.category} • {movie.year || 'Yıl yok'}
+                            <div className="text-sm text-muted-foreground flex items-center gap-4 flex-wrap">
+                              <span>⭐ {movie.rating}</span>
+                              <span>📅 {movie.year}</span>
+                              <span>🎬 {movie.category}</span>
+                              {movie.duration && <span>⏱️ {movie.duration}</span>}
                             </div>
                             <div className="text-xs text-muted-foreground truncate">
                               {movie.video_url}
                             </div>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Site Preview */}
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-lg">🎬 Site Önizlemesi (İlk 24 Film)</h3>
+                    <p className="text-sm text-muted-foreground">
+                      M3U dosyası import edildiğinde sitenizde bu şekilde görünecek:
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                      {sandboxParsed.slice(0, 24).map((movie, idx) => (
+                        <MovieCard
+                          key={idx}
+                          id={`sandbox-${idx}`}
+                          title={movie.title}
+                          poster={movie.poster_url || "https://via.placeholder.com/300x450"}
+                          rating={movie.rating}
+                          year={movie.year}
+                          category={movie.category}
+                          duration={movie.duration}
+                        />
                       ))}
                     </div>
                   </div>
