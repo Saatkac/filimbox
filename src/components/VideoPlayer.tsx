@@ -74,6 +74,19 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     // Fix missing protocol
     if (/^ttps?:\/\//i.test(out)) out = 'h' + out;
     if (/^\/\//.test(out)) out = 'https:' + out;
+    
+    // Special handling for vidmody.com - use HLS proxy and master.m3u8
+    if (out.includes('vidmody.com')) {
+      // Extract base URL and IMDB ID, use master.m3u8
+      const match = out.match(/(https?:\/\/[^/]+\/mm\/tt\d+)/i);
+      if (match) {
+        const masterUrl = match[1] + '/master.m3u8';
+        // Route through HLS proxy to handle .gif extensions
+        const proxyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hls-proxy?url=${encodeURIComponent(masterUrl)}`;
+        return proxyUrl;
+      }
+    }
+    
     // Auto-fix common HLS URL patterns from M3U imports
     if (!/\.m3u8(\?|$)/i.test(out)) {
       if (out.endsWith('/')) out = out + 'index.m3u8';
@@ -88,19 +101,22 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     const list: string[] = [];
     const push = (x: string) => { if (!list.includes(x)) list.push(x); };
 
-    if (/\.m3u8(\?|$)/i.test(url) || /\.gif(\?|$)/i.test(url)) return [url];
+    // Always return the URL as-is for vidmody.com or hls-proxy (already processed)
+    if (url.includes('vidmody.com') || url.includes('/hls-proxy')) return [url];
+
+    if (/\.m3u8(\?|$)/i.test(url)) return [url];
 
     // Trailing slash like /vs/ttxxxx/ -> try fetching master playlist
     if (url.endsWith('/')) {
-      push(url + 'index.m3u8');
       push(url + 'master.m3u8');
+      push(url + 'index.m3u8');
       push(url + '720.m3u8');
     }
 
     // "/main" endings
     if (/\/main\/?$/i.test(url)) {
-      push(url.replace(/\/main\/?$/i, '/main/index.m3u8'));
       push(url.replace(/\/main\/?$/i, '/main/master.m3u8'));
+      push(url.replace(/\/main\/?$/i, '/main/index.m3u8'));
       push(url.replace(/\/main\/?$/i, '/main/720.m3u8'));
     }
 
@@ -198,8 +214,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     video.addEventListener('pause', handlePause);
     video.addEventListener('canplay', handleCanPlay);
 
-    // Determine format
-    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc) || /\.gif(\?|$)/i.test(normalizedSrc);
+    // Determine format - HLS includes m3u8 files and hls-proxy URLs
+    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc) || normalizedSrc.includes('/hls-proxy');
     const isDASH = /\.mpd(\?|$)/i.test(normalizedSrc);
     const isMP4 = /\.mp4(\?|$)/i.test(normalizedSrc);
 
@@ -213,6 +229,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           if (hls) {
             try { hls.destroy(); } catch {}
           }
+          
           hls = new Hls({
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
@@ -222,19 +239,15 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             lowLatencyMode: false,
             startLevel: -1,
             capLevelToPlayerSize: true,
-            // Force VOD mode, not LIVE
             liveSyncDurationCount: 3,
             liveMaxLatencyDurationCount: Infinity,
-            // Handle fake extensions (e.g., .jpg segments)
             xhrSetup: function(xhr, url) {
-              // Force accepting video segments even with wrong MIME types
               xhr.responseType = 'arraybuffer';
-              // Don't validate MIME type - accept any response
-              xhr.overrideMimeType && xhr.overrideMimeType('application/octet-stream');
+              if (xhr.overrideMimeType) {
+                xhr.overrideMimeType('application/octet-stream');
+              }
             },
-            // Disable strict MIME type checking
             enableSoftwareAES: true,
-            // More aggressive loading
             manifestLoadingTimeOut: 20000,
             manifestLoadingMaxRetry: 4,
             levelLoadingTimeOut: 20000,
