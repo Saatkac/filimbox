@@ -69,20 +69,17 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const normalizeUrl = (u: string) => {
     if (!u) return u;
     let out = u.trim();
-    
     // Decode HTML entities
     out = out.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
     // Fix missing protocol
     if (/^ttps?:\/\//i.test(out)) out = 'h' + out;
     if (/^\/\//.test(out)) out = 'https:' + out;
-    
     // Auto-fix common HLS URL patterns from M3U imports
     if (!/\.m3u8(\?|$)/i.test(out)) {
       if (out.endsWith('/')) out = out + 'index.m3u8';
       if (/\/main\/?$/i.test(out)) out = out.replace(/\/main\/?$/i, '/main/index.m3u8');
       if (/\/master$/i.test(out)) out = out + '.m3u8';
     }
-    
     return out;
   };
 
@@ -228,18 +225,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             capLevelToPlayerSize: true,
             liveSyncDurationCount: 3,
             liveMaxLatencyDurationCount: Infinity,
-            xhrSetup: function(xhr, requestUrl) {
-              // Route ALL external video requests through HLS proxy to bypass CORS
-              const proxyUrl = `https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy?url=${encodeURIComponent(requestUrl)}`;
-              console.log('[VideoPlayer] Proxying:', requestUrl);
-              
-              // Important: Don't call xhr.open() - HLS.js handles that
-              // We just modify the URL by returning it
-              xhr.open('GET', proxyUrl, true);
+            xhrSetup: function(xhr, url) {
               xhr.responseType = 'arraybuffer';
-              if (xhr.overrideMimeType) {
-                xhr.overrideMimeType('application/octet-stream');
-              }
             },
             enableSoftwareAES: true,
             manifestLoadingTimeOut: 20000,
