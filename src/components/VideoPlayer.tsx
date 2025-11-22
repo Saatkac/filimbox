@@ -129,8 +129,19 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     const video = videoRef.current;
     const normalizedSrc = normalizeUrl(src);
     let nativeErrorHandler: ((e: Event) => void) | null = null;
+    let loadingTimeout: NodeJS.Timeout | null = null;
     setError(null);
     setIsReady(false);
+
+    console.log('[VideoPlayer] Initializing video with source:', normalizedSrc);
+
+    // Set loading timeout - if video doesn't start within 20 seconds, show error
+    loadingTimeout = setTimeout(() => {
+      if (!isReady) {
+        console.error('[VideoPlayer] Loading timeout - video did not start within 20 seconds');
+        setError("Video yüklenemedi. Kaynak sunucuya erişilemiyor.");
+      }
+    }, 20000);
 
     // Video event listeners
     const handleTimeUpdate = () => setCurrentTime(video.currentTime);
@@ -172,7 +183,14 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         onProgressUpdate(video.currentTime, video.duration);
       }
     };
-    const handleCanPlay = () => setIsReady(true);
+    const handleCanPlay = () => {
+      setIsReady(true);
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+        loadingTimeout = null;
+      }
+      console.log('[VideoPlayer] Video ready to play');
+    };
 
     // Web Audio API for volume boost (guard against cross-origin errors)
     if (!audioContextRef.current) {
@@ -226,6 +244,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             liveSyncDurationCount: 3,
             liveMaxLatencyDurationCount: Infinity,
             xhrSetup: function(xhr, url) {
+              xhr.withCredentials = false;
               xhr.responseType = 'arraybuffer';
             },
             enableSoftwareAES: true,
@@ -256,7 +275,12 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
               });
             }
             
+            if (loadingTimeout) {
+              clearTimeout(loadingTimeout);
+              loadingTimeout = null;
+            }
             setIsReady(true);
+            console.log('[VideoPlayer] HLS manifest parsed and ready');
           });
           hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => selectTurkish(hls!));
 
@@ -269,6 +293,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           });
 
           hls.on(Hls.Events.ERROR, (_, data) => {
+            console.error('[VideoPlayer] HLS Error:', data);
             // Retry strategy: recover once, then try next candidate
             // Track local counters via closure
             (hls as any)._networkRetry = (hls as any)._networkRetry ?? 0;
@@ -276,32 +301,43 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
 
             if (data.fatal) {
               if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                if ((hls as any)._networkRetry < 1) {
+                if ((hls as any)._networkRetry < 2) {
                   (hls as any)._networkRetry++;
+                  console.log(`[VideoPlayer] Network error, retrying... (${(hls as any)._networkRetry}/2)`);
                   hls.startLoad();
                 } else {
                   const next = candidates[++current];
-                  if (next) initHls(next); else {
-                    setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+                  if (next) {
+                    console.log('[VideoPlayer] Trying next candidate URL:', next);
+                    initHls(next);
+                  } else {
+                    setError("Video yüklenemedi. Sunucu erişim hatası.");
                     try { hls?.destroy(); } catch {}
                     hlsRef.current = null;
                   }
                 }
               } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                if ((hls as any)._mediaRecover < 1) {
+                if ((hls as any)._mediaRecover < 2) {
                   (hls as any)._mediaRecover++;
+                  console.log(`[VideoPlayer] Media error, recovering... (${(hls as any)._mediaRecover}/2)`);
                   hls.recoverMediaError();
                 } else {
                   const next = candidates[++current];
-                  if (next) initHls(next); else {
-                    setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+                  if (next) {
+                    console.log('[VideoPlayer] Trying next candidate URL:', next);
+                    initHls(next);
+                  } else {
+                    setError("Video oynatma hatası. Lütfen farklı bir içerik deneyin.");
                     try { hls?.destroy(); } catch {}
                     hlsRef.current = null;
                   }
                 }
               } else {
                 const next = candidates[++current];
-                if (next) initHls(next); else {
+                if (next) {
+                  console.log('[VideoPlayer] Fatal error, trying next candidate:', next);
+                  initHls(next);
+                } else {
                   setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
                   try { hls?.destroy(); } catch {}
                   hlsRef.current = null;
@@ -314,6 +350,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         initHls(candidates[0]);
 
         return () => {
+          if (loadingTimeout) clearTimeout(loadingTimeout);
           video.removeEventListener('timeupdate', handleTimeUpdate);
           video.removeEventListener('loadedmetadata', handleLoadedMetadata);
           video.removeEventListener('play', handlePlay);
@@ -365,6 +402,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     }
 
       return () => {
+        if (loadingTimeout) clearTimeout(loadingTimeout);
         video.removeEventListener('timeupdate', handleTimeUpdate);
         video.removeEventListener('loadedmetadata', handleLoadedMetadata);
         video.removeEventListener('play', handlePlay);
