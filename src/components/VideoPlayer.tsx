@@ -112,22 +112,33 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           hlsRef.current.destroy();
         }
 
-        // Create new HLS instance
+        // Create new HLS instance with optimized settings
         const hls = new Hls({
           debug: false,
           enableWorker: true,
           lowLatencyMode: false,
-          backBufferLength: 90,
+          // Buffer settings
           maxBufferLength: 30,
-          maxMaxBufferLength: 60,
+          maxMaxBufferLength: 600,
           maxBufferSize: 60 * 1000 * 1000,
-          maxBufferHole: 0.5,
-          manifestLoadingTimeOut: 10000,
-          manifestLoadingMaxRetry: 3,
-          levelLoadingTimeOut: 10000,
-          levelLoadingMaxRetry: 3,
-          fragLoadingTimeOut: 20000,
-          fragLoadingMaxRetry: 3,
+          maxBufferHole: 1.0,
+          highBufferWatchdogPeriod: 3,
+          nudgeOffset: 0.1,
+          nudgeMaxRetry: 5,
+          // Loading settings
+          manifestLoadingTimeOut: 20000,
+          manifestLoadingMaxRetry: 6,
+          manifestLoadingRetryDelay: 1000,
+          levelLoadingTimeOut: 20000,
+          levelLoadingMaxRetry: 6,
+          levelLoadingRetryDelay: 1000,
+          fragLoadingTimeOut: 30000,
+          fragLoadingMaxRetry: 6,
+          fragLoadingRetryDelay: 1000,
+          // CORS settings
+          xhrSetup: function(xhr: XMLHttpRequest, url: string) {
+            xhr.withCredentials = false;
+          },
         });
 
         hlsRef.current = hls;
@@ -143,23 +154,17 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         });
 
         hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error('[VideoPlayer] HLS error:', data);
+          console.error('[VideoPlayer] HLS error:', data.type, data.details);
           
           if (data.fatal) {
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                console.log('[VideoPlayer] Fatal network error, trying to recover...');
-                setError("Ağ hatası. Video yükleniyor...");
-                setTimeout(() => {
-                  if (hlsRef.current) {
-                    hlsRef.current.startLoad();
-                  }
-                }, 1000);
+                console.log('[VideoPlayer] Fatal network error, recovering...');
+                hls.startLoad();
                 break;
               
               case Hls.ErrorTypes.MEDIA_ERROR:
-                console.log('[VideoPlayer] Fatal media error, trying to recover...');
-                setError("Medya hatası. Düzeltiliyor...");
+                console.log('[VideoPlayer] Fatal media error, recovering...');
                 hls.recoverMediaError();
                 break;
               
@@ -169,8 +174,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
                 hls.destroy();
                 break;
             }
-          } else {
-            console.warn('[VideoPlayer] Non-fatal HLS error:', data.details);
           }
         });
 
@@ -307,7 +310,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         className="w-full h-full"
         poster={poster}
         playsInline
-        crossOrigin="anonymous"
         onClick={togglePlay}
       />
 
