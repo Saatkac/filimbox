@@ -61,6 +61,8 @@ const Admin = () => {
   const [sandboxM3uFile, setSandboxM3uFile] = useState<File | null>(null);
   const [sandboxParsed, setSandboxParsed] = useState<any[]>([]);
   const [sandboxLoading, setSandboxLoading] = useState(false);
+  const [sandboxSearch, setSandboxSearch] = useState("");
+  const [sandboxDisplayCount, setSandboxDisplayCount] = useState(24);
 
   useEffect(() => {
     loadMovies();
@@ -318,6 +320,8 @@ const Admin = () => {
       }
 
       setSandboxParsed(parsedMovies);
+      setSandboxSearch("");
+      setSandboxDisplayCount(24);
       toast({ 
         title: "Başarılı", 
         description: `${parsedMovies.length} film parse edildi` 
@@ -329,6 +333,19 @@ const Admin = () => {
     
     setSandboxLoading(false);
   };
+
+  const handleSandboxScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    const bottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 100;
+    
+    if (bottom && sandboxDisplayCount < filteredSandboxMovies.length) {
+      setSandboxDisplayCount(prev => Math.min(prev + 24, filteredSandboxMovies.length));
+    }
+  };
+
+  const filteredSandboxMovies = sandboxParsed.filter(movie => 
+    movie.title.toLowerCase().includes(sandboxSearch.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-cinema-dark p-6">
@@ -411,14 +428,32 @@ const Admin = () => {
                 <CardHeader>
                   <CardTitle>Parse Sonuçları ({sandboxParsed.length} film)</CardTitle>
                   <CardDescription>
-                    İlk 50 film gösteriliyor. Kategorilere göre dağılım ve örnek filmler aşağıda.
+                    Arama yapın ve aşağı kaydırarak tüm filmleri görüntüleyin.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Search Input */}
+                  <div className="space-y-2">
+                    <Label htmlFor="sandbox-search">Film Ara</Label>
+                    <Input
+                      id="sandbox-search"
+                      type="text"
+                      placeholder="Film adı yazın..."
+                      value={sandboxSearch}
+                      onChange={(e) => {
+                        setSandboxSearch(e.target.value);
+                        setSandboxDisplayCount(24);
+                      }}
+                      className="bg-secondary"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {filteredSandboxMovies.length} film bulundu
+                    </p>
+                  </div>
                   {/* Category Statistics */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {Object.entries(
-                      sandboxParsed.reduce((acc: any, movie) => {
+                      filteredSandboxMovies.reduce((acc: any, movie) => {
                         acc[movie.category] = (acc[movie.category] || 0) + 1;
                         return acc;
                       }, {})
@@ -433,61 +468,36 @@ const Admin = () => {
                       ))}
                   </div>
 
-                  {/* Sample Movies */}
-                  <div className="space-y-2">
-                    <h3 className="font-semibold text-lg">Örnek Filmler (İlk 50)</h3>
-                    <div className="max-h-[600px] overflow-y-auto space-y-2">
-                      {sandboxParsed.slice(0, 50).map((movie, idx) => (
-                        <div
-                          key={idx}
-                          className="bg-secondary p-4 rounded-lg flex items-start gap-4"
-                        >
-                          {movie.poster_url && (
-                            <img
-                              src={movie.poster_url}
-                              alt={movie.title}
-                              className="w-16 h-24 object-cover rounded"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
-                          )}
-                          <div className="flex-1 space-y-1">
-                            <div className="font-semibold">{movie.title}</div>
-                            <div className="text-sm text-muted-foreground flex items-center gap-4 flex-wrap">
-                              <span>⭐ {movie.rating}</span>
-                              <span>📅 {movie.year}</span>
-                              <span>🎬 {movie.category}</span>
-                              {movie.duration && <span>⏱️ {movie.duration}</span>}
-                            </div>
-                            <div className="text-xs text-muted-foreground truncate">
-                              {movie.video_url}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Site Preview */}
+                  {/* Site Preview with Infinite Scroll */}
                   <div className="space-y-4">
-                    <h3 className="font-semibold text-lg">🎬 Site Önizlemesi (İlk 24 Film)</h3>
+                    <h3 className="font-semibold text-lg">🎬 Site Önizlemesi</h3>
                     <p className="text-sm text-muted-foreground">
-                      M3U dosyası import edildiğinde sitenizde bu şekilde görünecek:
+                      M3U dosyası import edildiğinde sitenizde bu şekilde görünecek. Aşağı kaydırarak daha fazla film yükleyin. ({sandboxDisplayCount} / {filteredSandboxMovies.length} film gösteriliyor)
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-                      {sandboxParsed.slice(0, 24).map((movie, idx) => (
-                        <MovieCard
-                          key={idx}
-                          id={`sandbox-${idx}`}
-                          title={movie.title}
-                          poster={movie.poster_url || "https://via.placeholder.com/300x450"}
-                          rating={movie.rating}
-                          year={movie.year}
-                          category={movie.category}
-                          duration={movie.duration}
-                        />
-                      ))}
+                    <div 
+                      className="max-h-[800px] overflow-y-auto pr-2"
+                      onScroll={handleSandboxScroll}
+                    >
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+                        {filteredSandboxMovies.slice(0, sandboxDisplayCount).map((movie, idx) => (
+                          <MovieCard
+                            key={idx}
+                            id={`sandbox-${idx}`}
+                            title={movie.title}
+                            poster={movie.poster_url || "https://via.placeholder.com/300x450"}
+                            rating={movie.rating}
+                            year={movie.year}
+                            category={movie.category}
+                            duration={movie.duration}
+                          />
+                        ))}
+                      </div>
+                      {sandboxDisplayCount < filteredSandboxMovies.length && (
+                        <div className="text-center py-8">
+                          <Loader2 className="w-8 h-8 animate-spin mx-auto text-gold" />
+                          <p className="text-sm text-muted-foreground mt-2">Aşağı kaydırın...</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
