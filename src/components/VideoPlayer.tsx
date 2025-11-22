@@ -74,12 +74,29 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     // Fix missing protocol
     if (/^ttps?:\/\//i.test(out)) out = 'h' + out;
     if (/^\/\//.test(out)) out = 'https:' + out;
+    
+    // Remove problematic query parameters (vt, etc.)
+    try {
+      const urlObj = new URL(out);
+      // Remove vt and other tracking/problematic parameters
+      urlObj.searchParams.delete('vt');
+      urlObj.searchParams.delete('utm_source');
+      urlObj.searchParams.delete('utm_medium');
+      urlObj.searchParams.delete('utm_campaign');
+      out = urlObj.toString();
+    } catch (e) {
+      // If URL parsing fails, continue with original
+      console.log('[VideoPlayer] URL parse failed, using original:', out);
+    }
+    
     // Auto-fix common HLS URL patterns from M3U imports
     if (!/\.m3u8(\?|$)/i.test(out)) {
       if (out.endsWith('/')) out = out + 'index.m3u8';
       if (/\/main\/?$/i.test(out)) out = out.replace(/\/main\/?$/i, '/main/index.m3u8');
       if (/\/master$/i.test(out)) out = out + '.m3u8';
     }
+    
+    console.log('[VideoPlayer] Normalized URL:', out);
     return out;
   };
 
