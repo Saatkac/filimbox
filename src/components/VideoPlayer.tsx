@@ -218,6 +218,25 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             lowLatencyMode: false,
             startLevel: -1,
             capLevelToPlayerSize: true,
+            // Force VOD mode, not LIVE
+            liveSyncDurationCount: 3,
+            liveMaxLatencyDurationCount: Infinity,
+            // Handle fake extensions (e.g., .jpg segments)
+            xhrSetup: function(xhr, url) {
+              // Force accepting video segments even with wrong MIME types
+              xhr.responseType = 'arraybuffer';
+              // Don't validate MIME type - accept any response
+              xhr.overrideMimeType && xhr.overrideMimeType('application/octet-stream');
+            },
+            // Disable strict MIME type checking
+            enableSoftwareAES: true,
+            // More aggressive loading
+            manifestLoadingTimeOut: 20000,
+            manifestLoadingMaxRetry: 4,
+            levelLoadingTimeOut: 20000,
+            levelLoadingMaxRetry: 4,
+            fragLoadingTimeOut: 30000,
+            fragLoadingMaxRetry: 6,
           });
           hlsRef.current = hls;
           hls.loadSource(url);
@@ -226,9 +245,30 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
           // Auto-select Turkish audio track when available and mark ready
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             selectTurkish(hls!);
+            
+            // Force VOD mode if playlist type is VOD
+            const levels = hls!.levels;
+            if (levels && levels.length > 0) {
+              levels.forEach((level: any) => {
+                if (level.details) {
+                  // Force VOD type, not LIVE
+                  level.details.live = false;
+                  level.details.type = 'VOD';
+                }
+              });
+            }
+            
             setIsReady(true);
           });
           hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => selectTurkish(hls!));
+
+          // Force VOD on every level load
+          hls.on(Hls.Events.LEVEL_LOADED, (_, data) => {
+            if (data.details) {
+              data.details.live = false;
+              data.details.type = 'VOD';
+            }
+          });
 
           hls.on(Hls.Events.ERROR, (_, data) => {
             // Retry strategy: recover once, then try next candidate
