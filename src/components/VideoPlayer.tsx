@@ -60,6 +60,11 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const gainNodeRef = useRef<GainNode | null>(null);
   const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
   const { user } = useAuth();
+  const [seekTooltip, setSeekTooltip] = useState<{ show: boolean; time: number; position: number }>({ 
+    show: false, 
+    time: 0, 
+    position: 0 
+  });
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -195,7 +200,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     video.addEventListener('canplay', handleCanPlay);
 
     // Determine format
-    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
+    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc) || /\.gif(\?|$)/i.test(normalizedSrc);
     const isDASH = /\.mpd(\?|$)/i.test(normalizedSrc);
     const isMP4 = /\.mp4(\?|$)/i.test(normalizedSrc);
 
@@ -416,6 +421,20 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       setCurrentTime(value[0]);
     }
   }, []);
+  
+  const handleSeekHover = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const percentage = x / rect.width;
+    const time = percentage * duration;
+    const position = (x / rect.width) * 100;
+    setSeekTooltip({ show: true, time, position });
+  }, [duration]);
+  
+  const handleSeekLeave = useCallback(() => {
+    setSeekTooltip({ show: false, time: 0, position: 0 });
+  }, []);
 
   const handleVolumeChange = useCallback((value: number[]) => {
     const newVolume = Math.min(value[0], 6); // Limit to 600%
@@ -603,13 +622,27 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
                 <span className="text-white text-xs md:text-sm font-medium min-w-[45px]">
                   {formatTime(currentTime)}
                 </span>
-                <Slider
-                  value={[currentTime]}
-                  max={duration || 100}
-                  step={0.1}
-                  onValueChange={handleSeek}
-                  className="flex-1"
-                />
+                <div 
+                  className="flex-1 relative"
+                  onMouseMove={handleSeekHover}
+                  onMouseLeave={handleSeekLeave}
+                >
+                  <Slider
+                    value={[currentTime]}
+                    max={duration || 100}
+                    step={0.1}
+                    onValueChange={handleSeek}
+                    className="w-full"
+                  />
+                  {seekTooltip.show && (
+                    <div 
+                      className="absolute -top-10 bg-black/90 text-white text-xs px-2 py-1 rounded pointer-events-none whitespace-nowrap"
+                      style={{ left: `${seekTooltip.position}%`, transform: 'translateX(-50%)' }}
+                    >
+                      {formatTime(seekTooltip.time)}
+                    </div>
+                  )}
+                </div>
                 <span className="text-white text-xs md:text-sm font-medium min-w-[45px]">
                   {formatTime(duration)}
                 </span>
