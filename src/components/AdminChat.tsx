@@ -7,16 +7,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Send, Bot, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-type Message = { role: 'user' | 'assistant'; content: string };
+type Message = { 
+  role: 'user' | 'assistant'; 
+  content: string;
+  imageUrl?: string;
+};
 
 const AI_MODELS = [
-  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (Varsayılan)', description: 'Hızlı ve dengeli' },
-  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'En güçlü Gemini' },
-  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', description: 'Yeni nesil Gemini' },
-  { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'En hızlı ve ucuz' },
-  { id: 'openai/gpt-5', name: 'GPT-5', description: 'OpenAI en güçlü' },
-  { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', description: 'Maliyet-performans dengesi' },
-  { id: 'openai/gpt-5-nano', name: 'GPT-5 Nano', description: 'Hız ve maliyet tasarrufu' },
+  { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (Varsayılan)', description: 'Hızlı ve dengeli', type: 'text' },
+  { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'En güçlü Gemini', type: 'text' },
+  { id: 'google/gemini-3-pro-preview', name: 'Gemini 3 Pro Preview', description: 'Yeni nesil Gemini', type: 'text' },
+  { id: 'google/gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', description: 'En hızlı ve ucuz', type: 'text' },
+  { id: 'google/gemini-2.5-flash-image', name: 'Gemini 2.5 Flash Image', description: 'Görsel oluşturma', type: 'image' },
+  { id: 'google/gemini-3-pro-image-preview', name: 'Gemini 3 Pro Image', description: 'Yeni nesil görsel', type: 'image' },
+  { id: 'openai/gpt-5', name: 'GPT-5', description: 'OpenAI en güçlü', type: 'text' },
+  { id: 'openai/gpt-5-mini', name: 'GPT-5 Mini', description: 'Maliyet-performans dengesi', type: 'text' },
+  { id: 'openai/gpt-5-nano', name: 'GPT-5 Nano', description: 'Hız ve maliyet tasarrufu', type: 'text' },
 ] as const;
 
 export default function AdminChat() {
@@ -71,6 +77,7 @@ export default function AdminChat() {
       let textBuffer = '';
       let streamDone = false;
       let assistantContent = '';
+      let imageUrl = '';
 
       // Add empty assistant message
       setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
@@ -98,11 +105,22 @@ export default function AdminChat() {
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            const images = parsed.choices?.[0]?.message?.images;
+            
             if (content) {
               assistantContent += content;
               setMessages(prev => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: assistantContent };
+                updated[updated.length - 1] = { role: 'assistant', content: assistantContent, imageUrl };
+                return updated;
+              });
+            }
+            
+            if (images && images.length > 0) {
+              imageUrl = images[0]?.image_url?.url || '';
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'assistant', content: assistantContent, imageUrl };
                 return updated;
               });
             }
@@ -125,11 +143,22 @@ export default function AdminChat() {
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content as string | undefined;
+            const images = parsed.choices?.[0]?.message?.images;
+            
             if (content) {
               assistantContent += content;
               setMessages(prev => {
                 const updated = [...prev];
-                updated[updated.length - 1] = { role: 'assistant', content: assistantContent };
+                updated[updated.length - 1] = { role: 'assistant', content: assistantContent, imageUrl };
+                return updated;
+              });
+            }
+            
+            if (images && images.length > 0) {
+              imageUrl = images[0]?.image_url?.url || '';
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'assistant', content: assistantContent, imageUrl };
                 return updated;
               });
             }
@@ -200,7 +229,14 @@ export default function AdminChat() {
                       : 'bg-secondary text-foreground'
                   }`}
                 >
-                  <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+                  {msg.imageUrl && (
+                    <img 
+                      src={msg.imageUrl} 
+                      alt="Generated" 
+                      className="rounded-lg mb-2 max-w-full h-auto"
+                    />
+                  )}
+                  {msg.content && <p className="whitespace-pre-wrap text-sm">{msg.content}</p>}
                 </div>
                 {msg.role === 'user' && (
                   <div className="w-8 h-8 rounded-full bg-gold flex items-center justify-center flex-shrink-0">
