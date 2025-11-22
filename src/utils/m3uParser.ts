@@ -31,6 +31,17 @@ export function parseM3U(content: string): ParsedMovie[] {
       
       if (!videoUrl || videoUrl.startsWith('#')) continue;
       
+      // Fix vidmody.com /vs/ URLs to /mm/ format with proper HLS path
+      if (videoUrl.includes('vidmody.com/vs/')) {
+        // Extract IMDB ID from /vs/ttXXXX/ format
+        const imdbMatch = videoUrl.match(/\/vs\/(tt\d+)/);
+        if (imdbMatch) {
+          const imdbId = imdbMatch[1];
+          // Convert to /mm/ format with main3 (best quality) playlist
+          videoUrl = `https://vidmody.com/mm/${imdbId}/main3/index-v1-a1.gif`;
+        }
+      }
+      
       // Fix incomplete URLs - add index.m3u8 if URL ends with /
       if (videoUrl.endsWith('/')) {
         videoUrl = videoUrl + 'index.m3u8';
