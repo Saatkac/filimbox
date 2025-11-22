@@ -69,27 +69,12 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const normalizeUrl = (u: string) => {
     if (!u) return u;
     let out = u.trim();
-    console.log('[VideoPlayer] normalizeUrl input:', out);
     
     // Decode HTML entities
     out = out.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
     // Fix missing protocol
     if (/^ttps?:\/\//i.test(out)) out = 'h' + out;
     if (/^\/\//.test(out)) out = 'https:' + out;
-    
-    // Special handling for vidmody.com - use HLS proxy and master.m3u8
-    if (out.includes('vidmody.com')) {
-      console.log('[VideoPlayer] Detected vidmody URL, processing...');
-      // Extract base URL and IMDB ID, use master.m3u8
-      const match = out.match(/(https?:\/\/[^/]+\/mm\/tt\d+)/i);
-      if (match) {
-        const masterUrl = match[1] + '/master.m3u8';
-        // Route through HLS proxy to handle .gif extensions
-        const proxyUrl = `https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy?url=${encodeURIComponent(masterUrl)}`;
-        console.log('[VideoPlayer] Proxying vidmody through:', proxyUrl);
-        return proxyUrl;
-      }
-    }
     
     // Auto-fix common HLS URL patterns from M3U imports
     if (!/\.m3u8(\?|$)/i.test(out)) {
@@ -98,7 +83,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       if (/\/master$/i.test(out)) out = out + '.m3u8';
     }
     
-    console.log('[VideoPlayer] normalizeUrl output:', out);
     return out;
   };
 
@@ -106,9 +90,6 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     const url = u.trim();
     const list: string[] = [];
     const push = (x: string) => { if (!list.includes(x)) list.push(x); };
-
-    // Always return the URL as-is for vidmody.com or hls-proxy (already processed)
-    if (url.includes('vidmody.com') || url.includes('/hls-proxy')) return [url];
 
     if (/\.m3u8(\?|$)/i.test(url)) return [url];
 
@@ -220,8 +201,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     video.addEventListener('pause', handlePause);
     video.addEventListener('canplay', handleCanPlay);
 
-    // Determine format - HLS includes m3u8 files and hls-proxy URLs
-    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc) || normalizedSrc.includes('/hls-proxy');
+    // Determine format - HLS includes m3u8 files
+    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
     const isDASH = /\.mpd(\?|$)/i.test(normalizedSrc);
     const isMP4 = /\.mp4(\?|$)/i.test(normalizedSrc);
 
@@ -247,7 +228,14 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             capLevelToPlayerSize: true,
             liveSyncDurationCount: 3,
             liveMaxLatencyDurationCount: Infinity,
-            xhrSetup: function(xhr, url) {
+            xhrSetup: function(xhr, requestUrl) {
+              // Intercept all vidmody.com requests and route through proxy
+              let finalUrl = requestUrl;
+              if (requestUrl.includes('vidmody.com')) {
+                finalUrl = `https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy?url=${encodeURIComponent(requestUrl)}`;
+                console.log('[VideoPlayer] Proxying request:', requestUrl, '->', finalUrl);
+              }
+              xhr.open('GET', finalUrl, true);
               xhr.responseType = 'arraybuffer';
               if (xhr.overrideMimeType) {
                 xhr.overrideMimeType('application/octet-stream');
