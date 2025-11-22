@@ -102,6 +102,19 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     // Initialize HLS player
     const isHLS = videoUrl.includes('.m3u8');
     
+    // Check if HLS.js is loaded
+    if (typeof Hls === 'undefined') {
+      console.log('[VideoPlayer] HLS.js not loaded yet, waiting...');
+      setError('Video oynatıcı yükleniyor...');
+      setTimeout(() => {
+        if (videoRef.current) {
+          const newEvent = new Event('retry');
+          videoRef.current.dispatchEvent(newEvent);
+        }
+      }, 500);
+      return;
+    }
+    
     if (isHLS && Hls.isSupported()) {
       console.log('[VideoPlayer] Initializing HLS for:', videoUrl);
       
