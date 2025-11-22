@@ -95,7 +95,6 @@ const Index = () => {
               src={featuredContent.backdrop_url || featuredContent.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=1920&h=1080&fit=crop"}
               alt={featuredContent.title}
               loading="eager"
-              fetchPriority="high"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-cinema-dark via-cinema-dark/80 to-transparent" />

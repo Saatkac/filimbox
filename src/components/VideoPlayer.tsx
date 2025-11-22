@@ -108,6 +108,10 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
         enableWorker: true,
         lowLatencyMode: false,
         backBufferLength: 90,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1000 * 1000,
+        maxBufferHole: 0.5,
       });
 
       hls.loadSource(videoUrl);
