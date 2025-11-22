@@ -83,15 +83,14 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     return out;
   };
 
-  // Build fallback candidates for HLS URLs (handle various host patterns)
   const getHlsCandidates = (u: string): string[] => {
     const url = u.trim();
     const list: string[] = [];
     const push = (x: string) => { if (!list.includes(x)) list.push(x); };
 
-    if (/\.m3u8(\?|$)/i.test(url)) return [url];
+    if (/\.m3u8(\?|$)/i.test(url) || /\.gif(\?|$)/i.test(url)) return [url];
 
-    // Trailing slash like /vs/ttxxxx/ -> try common playlist names
+    // Trailing slash like /vs/ttxxxx/ -> try fetching master playlist
     if (url.endsWith('/')) {
       push(url + 'index.m3u8');
       push(url + 'master.m3u8');
@@ -111,7 +110,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     }
 
     return list.length ? list : [url];
-};
+  };
 
   // Prefer Turkish audio track when available (Hls.js)
   const selectTurkish = (hls: Hls) => {
