@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import Hls from "hls.js";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
@@ -13,6 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// HLS.js loaded from CDN
+declare const Hls: any;
+
 interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -23,7 +25,7 @@ interface VideoPlayerProps {
 const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
+  const hlsRef = useRef<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
