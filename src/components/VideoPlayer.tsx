@@ -229,13 +229,13 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             liveSyncDurationCount: 3,
             liveMaxLatencyDurationCount: Infinity,
             xhrSetup: function(xhr, requestUrl) {
-              // Intercept all vidmody.com requests and route through proxy
-              let finalUrl = requestUrl;
-              if (requestUrl.includes('vidmody.com')) {
-                finalUrl = `https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy?url=${encodeURIComponent(requestUrl)}`;
-                console.log('[VideoPlayer] Proxying request:', requestUrl, '->', finalUrl);
-              }
-              xhr.open('GET', finalUrl, true);
+              // Route ALL external video requests through HLS proxy to bypass CORS
+              const proxyUrl = `https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy?url=${encodeURIComponent(requestUrl)}`;
+              console.log('[VideoPlayer] Proxying:', requestUrl);
+              
+              // Important: Don't call xhr.open() - HLS.js handles that
+              // We just modify the URL by returning it
+              xhr.open('GET', proxyUrl, true);
               xhr.responseType = 'arraybuffer';
               if (xhr.overrideMimeType) {
                 xhr.overrideMimeType('application/octet-stream');
