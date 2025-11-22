@@ -214,6 +214,21 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             try { hls.destroy(); } catch {}
           }
           
+          // Proxy external URLs to bypass CORS
+          let hlsUrl = url;
+          try {
+            const urlObj = new URL(url);
+            const currentHost = window.location.hostname;
+            // If URL is external (not from our domain or lovable), proxy it
+            if (!urlObj.hostname.includes(currentHost) && !urlObj.hostname.includes('lovable')) {
+              const proxyBase = 'https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy';
+              hlsUrl = `${proxyBase}?url=${encodeURIComponent(url)}`;
+              console.log('[VideoPlayer] Using proxy for external URL:', url);
+            }
+          } catch (e) {
+            console.error('[VideoPlayer] Failed to parse URL:', e);
+          }
+          
           hls = new Hls({
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
@@ -237,7 +252,7 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
             fragLoadingMaxRetry: 6,
           });
           hlsRef.current = hls;
-          hls.loadSource(url);
+          hls.loadSource(hlsUrl);
           hls.attachMedia(video);
 
           // Auto-select Turkish audio track when available and mark ready
@@ -344,7 +359,23 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         const candidates = getHlsCandidates(normalizedSrc);
         let idx = 0;
-        const setNativeSrc = (u: string) => { video.src = u; video.load(); };
+        const setNativeSrc = (u: string) => {
+          // Proxy external URLs for native HLS too
+          let finalUrl = u;
+          try {
+            const urlObj = new URL(u);
+            const currentHost = window.location.hostname;
+            if (!urlObj.hostname.includes(currentHost) && !urlObj.hostname.includes('lovable')) {
+              const proxyBase = 'https://riqoyrqxqhhntwovtuwf.supabase.co/functions/v1/hls-proxy';
+              finalUrl = `${proxyBase}?url=${encodeURIComponent(u)}`;
+              console.log('[VideoPlayer] Using proxy for native HLS:', u);
+            }
+          } catch (e) {
+            console.error('[VideoPlayer] Failed to parse native URL:', e);
+          }
+          video.src = finalUrl;
+          video.load();
+        };
         nativeErrorHandler = () => {
           idx++;
           const next = candidates[idx];
