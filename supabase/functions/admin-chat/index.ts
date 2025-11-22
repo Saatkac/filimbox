@@ -13,23 +13,35 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
+    // Check if it's an image generation model
+    const isImageModel = model.includes('image');
+    
+    const requestBody: any = {
+      model,
+      messages: [
+        { 
+          role: "system", 
+          content: isImageModel 
+            ? "Sen bir görsel oluşturma asistanısın. Kullanıcının isteğine göre görsel oluştur."
+            : "Sen bir film ve dizi platformu yönetim asistanısın. Kullanıcılara platform yönetimi, içerik ekleme, kategorizasyon ve teknik sorunlar hakkında yardımcı olabilirsin. Türkçe konuş ve dostça ol." 
+        },
+        ...messages,
+      ],
+      stream: true,
+    };
+
+    // Add modalities for image models
+    if (isImageModel) {
+      requestBody.modalities = ["image", "text"];
+    }
+
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { 
-            role: "system", 
-            content: "Sen bir film ve dizi platformu yönetim asistanısın. Kullanıcılara platform yönetimi, içerik ekleme, kategorizasyon ve teknik sorunlar hakkında yardımcı olabilirsin. Türkçe konuş ve dostça ol." 
-          },
-          ...messages,
-        ],
-        stream: true,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
