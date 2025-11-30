@@ -76,18 +76,29 @@ const Friends = () => {
   const loadPendingRequests = async () => {
     if (!user) return;
     
-    const { data } = await supabase
+    const { data: friendRequests } = await supabase
       .from("friends")
-      .select("*, requester_profile:profiles!friends_user_id_fkey(username, avatar_url)")
+      .select("*")
       .eq("friend_id", user.id)
       .eq("status", "pending");
 
-    if (data) {
-      setPendingRequests(data.map(d => ({
-        ...d,
-        friend_profile: null,
-        requester_profile: d.requester_profile as any
-      })));
+    if (friendRequests) {
+      const requestsWithProfiles = await Promise.all(
+        friendRequests.map(async (request) => {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("username, avatar_url")
+            .eq("user_id", request.user_id)
+            .maybeSingle();
+          
+          return {
+            ...request,
+            friend_profile: null,
+            requester_profile: profile
+          };
+        })
+      );
+      setPendingRequests(requestsWithProfiles);
     }
   };
 

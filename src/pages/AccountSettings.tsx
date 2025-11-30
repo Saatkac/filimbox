@@ -1,15 +1,14 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, LogOut, User, Image as ImageIcon, Users } from "lucide-react";
+import { Settings, LogOut, User, Image as ImageIcon } from "lucide-react";
 
 const AccountSettings = () => {
   const [username, setUsername] = useState("");
@@ -106,117 +105,82 @@ const AccountSettings = () => {
           <h1 className="text-3xl font-bold text-gold">Hesap Ayarları</h1>
         </div>
 
-        <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="profile">Profil</TabsTrigger>
-            <TabsTrigger value="friends">Arkadaşlar</TabsTrigger>
-          </TabsList>
+        <div className="space-y-6">
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5" />
+                Profil Fotoğrafı
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center gap-4">
+                <img 
+                  src={avatarUrl} 
+                  alt="Profil Resmi" 
+                  className="w-20 h-20 rounded-full object-cover"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-          <TabsContent value="profile">
-            <div className="space-y-6">
-              <Card className="bg-card border-border">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <ImageIcon className="w-5 h-5" />
-                    Profil Fotoğrafı
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-center gap-4">
-                    <img 
-                      src={avatarUrl} 
-                      alt="Profil Resmi" 
-                      className="w-20 h-20 rounded-full object-cover"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+          <Card className="bg-card border-border">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5" />
+                Profil Bilgileri
+              </CardTitle>
+              <CardDescription>
+                {isAdmin && "Admin kullanıcı adı değiştirilemez"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-posta</Label>
+                <Input id="email" value={user?.email || ""} disabled className="bg-secondary" />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="username">Kullanıcı Adı</Label>
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={isAdmin}
+                  className="bg-secondary"
+                />
+              </div>
 
-              <Card className="bg-card border-border">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <User className="w-5 h-5" />
-                    Profil Bilgileri
-                  </CardTitle>
-                  <CardDescription>
-                    {isAdmin && "Admin kullanıcı adı değiştirilemez"}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">E-posta</Label>
-                    <Input id="email" value={user?.email || ""} disabled className="bg-secondary" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Kullanıcı Adı</Label>
-                    <Input
-                      id="username"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      disabled={isAdmin}
-                      className="bg-secondary"
-                    />
-                  </div>
+              <Button 
+                onClick={handleSave} 
+                disabled={loading || isAdmin}
+                className="bg-gold hover:bg-gold-light text-black"
+              >
+                {loading ? "Kaydediliyor..." : "Kaydet"}
+              </Button>
+            </CardContent>
+          </Card>
 
-                  <Button 
-                    onClick={handleSave} 
-                    disabled={loading || isAdmin}
-                    className="bg-gold hover:bg-gold-light text-black"
-                  >
-                    {loading ? "Kaydediliyor..." : "Kaydet"}
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-card border-border border-destructive/50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-destructive">
-                    <LogOut className="w-5 h-5" />
-                    Çıkış Yap
-                  </CardTitle>
-                  <CardDescription>Hesabınızdan çıkış yapın</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button 
-                    onClick={handleLogout} 
-                    variant="destructive"
-                    className="w-full"
-                  >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Çıkış Yap
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="friends">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Arkadaşlarım
-                </CardTitle>
-                <CardDescription>
-                  Arkadaşlarınızı yönetin ve birlikte film izleyin
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Link to="/friends">
-                  <Button className="w-full">
-                    <Users className="w-4 h-4 mr-2" />
-                    Arkadaşlarımı Gör
-                  </Button>
-                </Link>
-                <p className="text-sm text-muted-foreground">
-                  Arkadaşlarınızla birlikte aynı anda film izleyin, sesli ve görüntülü sohbet edin!
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-        </Tabs>
+          <Card className="bg-card border-border border-destructive/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <LogOut className="w-5 h-5" />
+                Çıkış Yap
+              </CardTitle>
+              <CardDescription>Hesabınızdan çıkış yapın</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                onClick={handleLogout} 
+                variant="destructive"
+                className="w-full"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Çıkış Yap
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
