@@ -259,72 +259,103 @@ const MovieDetail = () => {
   };
 
   const startWatchParty = async () => {
-    if (!user || !id) return;
+    if (!user || !id) {
+      toast({ variant: "destructive", title: "Giriş yapmalısınız" });
+      return;
+    }
 
-    // First check if user has a profile
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    setLoading(true);
 
-    if (!profile) {
-      // Create profile if doesn't exist
-      const { error: createProfileError } = await supabase
+    try {
+      // First check if user has a profile
+      const { data: profile } = await supabase
         .from("profiles")
-        .insert({
-          user_id: user.id,
-          username: user.email?.split('@')[0] || "Kullanıcı",
-          avatar_url: "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"
-        });
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      if (createProfileError) {
-        console.error("Profile creation error:", createProfileError);
-        toast({ variant: "destructive", title: "Profil oluşturulamadı", description: createProfileError.message });
+      if (!profile) {
+        // Create profile if doesn't exist
+        const { error: createProfileError } = await supabase
+          .from("profiles")
+          .insert({
+            user_id: user.id,
+            username: user.email?.split('@')[0] || "Kullanıcı",
+            avatar_url: "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"
+          });
+
+        if (createProfileError) {
+          console.error("Profile creation error:", createProfileError);
+          toast({ variant: "destructive", title: "Profil oluşturulamadı", description: createProfileError.message });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Check if there's already an active party for this content
+      const { data: existingParty } = await supabase
+        .from("watch_parties")
+        .select("*")
+        .eq("host_user_id", user.id)
+        .eq("is_active", true)
+        .or(isMovie ? `movie_id.eq.${id}` : `series_id.eq.${id}`)
+        .maybeSingle();
+
+      if (existingParty) {
+        setActiveParty(existingParty.id);
+        toast({ title: "Mevcut parti açıldı", description: "Zaten aktif bir izleme partiniz var" });
+        setLoading(false);
         return;
       }
+
+      const { data, error } = await supabase
+        .from("watch_parties")
+        .insert({
+          host_user_id: user.id,
+          movie_id: isMovie ? id : null,
+          series_id: !isMovie ? id : null,
+          episode_id: selectedEpisode?.id || null,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Watch party creation error:", error);
+        toast({ variant: "destructive", title: "Parti oluşturulamadı", description: error.message });
+        setLoading(false);
+        return;
+      }
+
+      // Host olarak katıl
+      const { error: participantError } = await supabase
+        .from("watch_party_participants")
+        .insert({
+          party_id: data.id,
+          user_id: user.id,
+          is_host: true,
+          video_progress: currentVideoTime
+        });
+
+      if (participantError) {
+        console.error("Participant join error:", participantError);
+        toast({ variant: "destructive", title: "Partiye katılma hatası", description: participantError.message });
+        setLoading(false);
+        return;
+      }
+
+      setActiveParty(data.id);
+      toast({ title: "Başarılı", description: "İzleme partisi başlatıldı! Arkadaşlarınızı davet edebilirsiniz." });
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      toast({ variant: "destructive", title: "Beklenmeyen hata", description: "Lütfen tekrar deneyin" });
+    } finally {
+      setLoading(false);
     }
-
-    const { data, error } = await supabase
-      .from("watch_parties")
-      .insert({
-        host_user_id: user.id,
-        movie_id: isMovie ? id : null,
-        series_id: !isMovie ? id : null,
-        episode_id: selectedEpisode?.id || null,
-        is_active: true
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Watch party creation error:", error);
-      toast({ variant: "destructive", title: "Parti oluşturulamadı", description: error.message });
-      return;
-    }
-
-    // Host olarak katıl
-    const { error: participantError } = await supabase
-      .from("watch_party_participants")
-      .insert({
-        party_id: data.id,
-        user_id: user.id,
-        is_host: true,
-        video_progress: currentVideoTime
-      });
-
-    if (participantError) {
-      console.error("Participant join error:", participantError);
-      toast({ variant: "destructive", title: "Partiye katılma hatası", description: participantError.message });
-      return;
-    }
-
-    setActiveParty(data.id);
-    toast({ title: "Başarılı", description: "İzleme partisi başlatıldı! Arkadaşlarınızı davet edebilirsiniz." });
   };
 
   // Determine video source - must be before early returns (hooks rule)
-  const videoSrc = useMemo(() => 
+  const videoSrc = useMemo(() =>
     isMovie
       ? content?.video_url
       : (selectedEpisode?.video_url || (episodes.length > 0 ? episodes[0]?.video_url : undefined)),

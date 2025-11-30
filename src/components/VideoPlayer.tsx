@@ -205,7 +205,38 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       setIsReady(true);
     }
 
+
+    // Video event listeners
+    const handleTimeUpdate = () => {
+      if (videoElement) {
+        setCurrentTime(videoElement.currentTime);
+        if (onProgressUpdate) {
+          onProgressUpdate(videoElement.currentTime, videoElement.duration || 0);
+        }
+      }
+    };
+
+    const handleLoadedMetadata = () => {
+      if (videoElement) {
+        setDuration(videoElement.duration);
+        selectTurkish(hlsRef.current!);
+      }
+    };
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    videoElement.addEventListener('timeupdate', handleTimeUpdate);
+    videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+    videoElement.addEventListener('play', handlePlay);
+    videoElement.addEventListener('pause', handlePause);
+
     return () => {
+      videoElement.removeEventListener('timeupdate', handleTimeUpdate);
+      videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      videoElement.removeEventListener('play', handlePlay);
+      videoElement.removeEventListener('pause', handlePause);
+      
       if (hlsRef.current) {
         hlsRef.current.destroy();
       }
