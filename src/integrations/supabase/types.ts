@@ -148,6 +148,33 @@ export type Database = {
           },
         ]
       }
+      friends: {
+        Row: {
+          created_at: string
+          friend_id: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          friend_id: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          friend_id?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       movies: {
         Row: {
           backdrop_url: string | null
@@ -201,6 +228,38 @@ export type Database = {
           year?: number | null
         }
         Relationships: []
+      }
+      party_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          party_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          party_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          party_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "party_messages_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "watch_parties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -294,6 +353,99 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      watch_parties: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          episode_id: string | null
+          host_user_id: string
+          id: string
+          is_active: boolean
+          movie_id: string | null
+          series_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          episode_id?: string | null
+          host_user_id: string
+          id?: string
+          is_active?: boolean
+          movie_id?: string | null
+          series_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          episode_id?: string | null
+          host_user_id?: string
+          id?: string
+          is_active?: boolean
+          movie_id?: string | null
+          series_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watch_parties_episode_id_fkey"
+            columns: ["episode_id"]
+            isOneToOne: false
+            referencedRelation: "episodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "watch_parties_movie_id_fkey"
+            columns: ["movie_id"]
+            isOneToOne: false
+            referencedRelation: "movies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "watch_parties_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "series"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      watch_party_participants: {
+        Row: {
+          id: string
+          is_host: boolean | null
+          joined_at: string
+          left_at: string | null
+          party_id: string
+          user_id: string
+          video_progress: number | null
+        }
+        Insert: {
+          id?: string
+          is_host?: boolean | null
+          joined_at?: string
+          left_at?: string | null
+          party_id: string
+          user_id: string
+          video_progress?: number | null
+        }
+        Update: {
+          id?: string
+          is_host?: boolean | null
+          joined_at?: string
+          left_at?: string | null
+          party_id?: string
+          user_id?: string
+          video_progress?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watch_party_participants_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "watch_parties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       watch_progress: {
         Row: {

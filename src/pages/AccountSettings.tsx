@@ -1,32 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate, Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Mail, Lock, LogOut, User, Image as ImageIcon } from "lucide-react";
-
-// Cookie helpers (shared with player)
-const setCookie = (name: string, value: string, days = 365) => {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-};
-const getCookie = (name: string): string | null => {
-  const parts = document.cookie ? document.cookie.split('; ') : [];
-  for (const part of parts) {
-    const eqIndex = part.indexOf('=');
-    if (eqIndex > -1) {
-      const key = part.substring(0, eqIndex);
-      const val = part.substring(eqIndex + 1);
-      if (key === name) return decodeURIComponent(val);
-    }
-  }
-  return null;
-};
+import { Settings, LogOut, User, Image as ImageIcon, Users } from "lucide-react";
 
 const AccountSettings = () => {
   const [username, setUsername] = useState("");
@@ -104,34 +87,6 @@ const AccountSettings = () => {
     setLoading(false);
   };
 
-  const handleSaveAvatar = async () => {
-    if (!user || !isAdmin) {
-      toast({ 
-        variant: "destructive", 
-        title: "Hata", 
-        description: "Sadece admin profil fotoğrafı değiştirebilir" 
-      });
-      return;
-    }
-
-    setLoading(true);
-    
-    const { error } = await supabase
-      .from("profiles")
-      .upsert({ 
-        user_id: user.id, 
-        avatar_url: avatarUrl.trim() || "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"
-      });
-
-    if (error) {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
-    } else {
-      toast({ title: "Başarılı", description: "Profil fotoğrafı güncellendi" });
-    }
-    
-    setLoading(false);
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/");
@@ -151,110 +106,133 @@ const AccountSettings = () => {
           <h1 className="text-3xl font-bold text-gold">Hesap Ayarları</h1>
         </div>
 
-        <div className="space-y-6">
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ImageIcon className="w-5 h-5" />
-                Profil Fotoğrafı
-              </CardTitle>
-              <CardDescription>
-                {isAdmin ? "Admin olarak profil fotoğrafınızı değiştirebilirsiniz" : "Herkesin profil fotoğrafı varsayılan olarak ayarlanmıştır"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center gap-4">
-                <img 
-                  src={avatarUrl} 
-                  alt="Profil Resmi" 
-                  className="w-20 h-20 rounded-full object-cover"
-                />
-              </div>
+        <Tabs defaultValue="profile" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="profile">Profil</TabsTrigger>
+            <TabsTrigger value="friends">Arkadaşlar</TabsTrigger>
+            <TabsTrigger value="favorites">Favoriler</TabsTrigger>
+          </TabsList>
 
-              {isAdmin && (
-                <div className="space-y-2">
-                  <Label htmlFor="avatar">Profil Fotoğrafı URL</Label>
-                  <Input
-                    id="avatar"
-                    value={avatarUrl}
-                    onChange={(e) => setAvatarUrl(e.target.value)}
-                    className="bg-secondary"
-                    placeholder="https://example.com/avatar.jpg"
-                  />
+          <TabsContent value="profile">
+            <div className="space-y-6">
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5" />
+                    Profil Fotoğrafı
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="flex items-center gap-4">
+                    <img 
+                      src={avatarUrl} 
+                      alt="Profil Resmi" 
+                      className="w-20 h-20 rounded-full object-cover"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-card border-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="w-5 h-5" />
+                    Profil Bilgileri
+                  </CardTitle>
+                  <CardDescription>
+                    {isAdmin && "Admin kullanıcı adı değiştirilemez"}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-posta</Label>
+                    <Input id="email" value={user?.email || ""} disabled className="bg-secondary" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="username">Kullanıcı Adı</Label>
+                    <Input
+                      id="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      disabled={isAdmin}
+                      className="bg-secondary"
+                    />
+                  </div>
+
                   <Button 
-                    onClick={handleSaveAvatar} 
-                    disabled={loading}
-                    className="bg-gold hover:bg-gold-light text-black mt-2"
+                    onClick={handleSave} 
+                    disabled={loading || isAdmin}
+                    className="bg-gold hover:bg-gold-light text-black"
                   >
-                    {loading ? "Kaydediliyor..." : "Profil Fotoğrafını Güncelle"}
+                    {loading ? "Kaydediliyor..." : "Kaydet"}
                   </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
-          <Card className="bg-card border-border">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="w-5 h-5" />
-                Profil Bilgileri
-              </CardTitle>
-              <CardDescription>
-                {isAdmin && "Admin kullanıcı adı değiştirilemez"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">E-posta</Label>
-                <Input id="email" value={user?.email || ""} disabled className="bg-secondary" />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="username">Kullanıcı Adı</Label>
-                <Input
-                  id="username"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  disabled={isAdmin}
-                  className="bg-secondary"
-                />
-                {isAdmin && (
-                  <p className="text-sm text-muted-foreground">
-                    Admin kullanıcı adı değiştirilemez
-                  </p>
-                )}
-              </div>
+              <Card className="bg-card border-border border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-destructive">
+                    <LogOut className="w-5 h-5" />
+                    Çıkış Yap
+                  </CardTitle>
+                  <CardDescription>Hesabınızdan çıkış yapın</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button 
+                    onClick={handleLogout} 
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Çıkış Yap
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
-              <Button 
-                onClick={handleSave} 
-                disabled={loading || isAdmin}
-                className="bg-gold hover:bg-gold-light text-black"
-              >
-                {loading ? "Kaydediliyor..." : "Kaydet"}
-              </Button>
-            </CardContent>
-          </Card>
+          <TabsContent value="friends">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  Arkadaşlarım
+                </CardTitle>
+                <CardDescription>
+                  Arkadaşlarınızı yönetin ve birlikte film izleyin
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Link to="/friends">
+                  <Button className="w-full">
+                    <Users className="w-4 h-4 mr-2" />
+                    Arkadaşlarımı Gör
+                  </Button>
+                </Link>
+                <p className="text-sm text-muted-foreground">
+                  Arkadaşlarınızla birlikte aynı anda film izleyin, sesli ve görüntülü sohbet edin!
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          <Card className="bg-card border-border border-destructive/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <LogOut className="w-5 h-5" />
-                Çıkış Yap
-              </CardTitle>
-              <CardDescription>Hesabınızdan çıkış yapın</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button 
-                onClick={handleLogout} 
-                variant="destructive"
-                className="w-full"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Çıkış Yap
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+          <TabsContent value="favorites">
+            <Card>
+              <CardHeader>
+                <CardTitle>Favoriler</CardTitle>
+                <CardDescription>
+                  Favori filmlerinizi görüntüleyin
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link to="/favorites">
+                  <Button className="w-full">Favorilerime Git</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
