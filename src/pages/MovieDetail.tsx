@@ -261,6 +261,30 @@ const MovieDetail = () => {
   const startWatchParty = async () => {
     if (!user || !id) return;
 
+    // First check if user has a profile
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!profile) {
+      // Create profile if doesn't exist
+      const { error: createProfileError } = await supabase
+        .from("profiles")
+        .insert({
+          user_id: user.id,
+          username: user.email?.split('@')[0] || "Kullanıcı",
+          avatar_url: "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"
+        });
+
+      if (createProfileError) {
+        console.error("Profile creation error:", createProfileError);
+        toast({ variant: "destructive", title: "Profil oluşturulamadı", description: createProfileError.message });
+        return;
+      }
+    }
+
     const { data, error } = await supabase
       .from("watch_parties")
       .insert({
@@ -274,17 +298,26 @@ const MovieDetail = () => {
       .single();
 
     if (error) {
+      console.error("Watch party creation error:", error);
       toast({ variant: "destructive", title: "Parti oluşturulamadı", description: error.message });
       return;
     }
 
     // Host olarak katıl
-    await supabase.from("watch_party_participants").insert({
-      party_id: data.id,
-      user_id: user.id,
-      is_host: true,
-      video_progress: currentVideoTime
-    });
+    const { error: participantError } = await supabase
+      .from("watch_party_participants")
+      .insert({
+        party_id: data.id,
+        user_id: user.id,
+        is_host: true,
+        video_progress: currentVideoTime
+      });
+
+    if (participantError) {
+      console.error("Participant join error:", participantError);
+      toast({ variant: "destructive", title: "Partiye katılma hatası", description: participantError.message });
+      return;
+    }
 
     setActiveParty(data.id);
     toast({ title: "Başarılı", description: "İzleme partisi başlatıldı! Arkadaşlarınızı davet edebilirsiniz." });
