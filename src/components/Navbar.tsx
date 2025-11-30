@@ -1,4 +1,4 @@
-import { Search, Film, LogIn, UserCircle, Shield, Heart, Settings } from "lucide-react";
+import { Search, Film, LogIn, UserCircle, Shield, Heart, Settings, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,10 @@ const Navbar = () => {
                     <DropdownMenuItem onClick={() => navigate("/favorites")} className="cursor-pointer">
                       <Heart className="w-4 h-4 mr-2" />
                       Favorilerim
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/friends")} className="cursor-pointer">
+                      <Users className="w-4 h-4 mr-2" />
+                      Arkadaşlarım
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate("/account-settings")} className="cursor-pointer">
                       <Settings className="w-4 h-4 mr-2" />
