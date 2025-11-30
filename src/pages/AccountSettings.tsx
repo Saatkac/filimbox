@@ -107,10 +107,9 @@ const AccountSettings = () => {
         </div>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="profile">Profil</TabsTrigger>
             <TabsTrigger value="friends">Arkadaşlar</TabsTrigger>
-            <TabsTrigger value="favorites">Favoriler</TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile">
@@ -217,21 +216,6 @@ const AccountSettings = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="favorites">
-            <Card>
-              <CardHeader>
-                <CardTitle>Favoriler</CardTitle>
-                <CardDescription>
-                  Favori filmlerinizi görüntüleyin
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link to="/favorites">
-                  <Button className="w-full">Favorilerime Git</Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
     </div>
