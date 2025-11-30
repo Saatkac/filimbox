@@ -4,12 +4,13 @@ import Navbar from "@/components/Navbar";
 import VideoPlayer from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
 import CommentSection from "@/components/CommentSection";
+import WatchParty from "@/components/WatchParty";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Star, Clock, Calendar, ArrowLeft, Play, Heart } from "lucide-react";
+import { Star, Clock, Calendar, ArrowLeft, Play, Heart, Users } from "lucide-react";
 
 interface Episode {
   id: string;
@@ -36,6 +37,9 @@ const MovieDetail = () => {
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
   const [watchProgress, setWatchProgress] = useState<number>(0);
   const progressInterval = useRef<NodeJS.Timeout | null>(null);
+  const [activeParty, setActiveParty] = useState<string | null>(null);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   
   const loadContent = useCallback(async () => {
     setLoading(true);
@@ -254,6 +258,38 @@ const MovieDetail = () => {
     }
   };
 
+  const startWatchParty = async () => {
+    if (!user || !id) return;
+
+    const { data, error } = await supabase
+      .from("watch_parties")
+      .insert({
+        host_user_id: user.id,
+        movie_id: isMovie ? id : null,
+        series_id: !isMovie ? id : null,
+        episode_id: selectedEpisode?.id || null,
+        is_active: true
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast({ variant: "destructive", title: "Parti oluşturulamadı", description: error.message });
+      return;
+    }
+
+    // Host olarak katıl
+    await supabase.from("watch_party_participants").insert({
+      party_id: data.id,
+      user_id: user.id,
+      is_host: true,
+      video_progress: currentVideoTime
+    });
+
+    setActiveParty(data.id);
+    toast({ title: "Başarılı", description: "İzleme partisi başlatıldı! Arkadaşlarınızı davet edebilirsiniz." });
+  };
+
   // Determine video source - must be before early returns (hooks rule)
   const videoSrc = useMemo(() => 
     isMovie
@@ -356,14 +392,25 @@ const MovieDetail = () => {
                 <h1 className="text-4xl md:text-5xl font-bold gold-glow">
                   {content.title}
                 </h1>
-                <Button
-                  onClick={toggleFavorite}
-                  variant="outline"
-                  size="icon"
-                  className="border-gold hover:bg-gold/20"
-                >
-                  <Heart className={`w-6 h-6 ${isFavorite ? "fill-gold text-gold" : "text-gold"}`} />
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={startWatchParty}
+                    variant="outline"
+                    size="icon"
+                    className="border-primary hover:bg-primary/20"
+                    title="Arkadaşlarınızla izleyin"
+                  >
+                    <Users className="w-6 h-6 text-primary" />
+                  </Button>
+                  <Button
+                    onClick={toggleFavorite}
+                    variant="outline"
+                    size="icon"
+                    className="border-gold hover:bg-gold/20"
+                  >
+                    <Heart className={`w-6 h-6 ${isFavorite ? "fill-gold text-gold" : "text-gold"}`} />
+                  </Button>
+                </div>
               </div>
               
               <div className="flex flex-wrap items-center gap-4 mb-6">
@@ -483,6 +530,19 @@ const MovieDetail = () => {
               ))}
             </div>
           </div>
+        )}
+
+        {activeParty && (
+          <WatchParty
+            partyId={activeParty}
+            onClose={() => setActiveParty(null)}
+            onSeek={(time) => {
+              if (videoRef.current) {
+                videoRef.current.currentTime = time;
+              }
+            }}
+            currentTime={currentVideoTime}
+          />
         )}
       </div>
     </div>

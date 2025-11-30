@@ -143,218 +143,74 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   useEffect(() => {
     if (!videoRef.current || !src) return;
 
-    const video = videoRef.current;
-    const normalizedSrc = normalizeUrl(src);
-    let nativeErrorHandler: ((e: Event) => void) | null = null;
-    let loadingTimeout: NodeJS.Timeout | null = null;
+    const videoElement = videoRef.current;
+    const cleanSrc = normalizeUrl(src);
+    console.log('[VideoPlayer] Initializing with:', cleanSrc);
     setError(null);
     setIsReady(false);
 
-    console.log('[VideoPlayer] Initializing video with source:', normalizedSrc);
-
-    // Set loading timeout - if video doesn't start within 20 seconds, show error
-    loadingTimeout = setTimeout(() => {
-      if (!isReady) {
-        console.error('[VideoPlayer] Loading timeout - video did not start within 20 seconds');
-        setError("Video yüklenemedi. Kaynak sunucuya erişilemiyor.");
-      }
-    }, 20000);
-
-    // Video event listeners
-    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration);
-      // Seek to initial progress if provided
-      if (initialProgress > 0 && video.duration > 0) {
-        video.currentTime = Math.min(initialProgress, video.duration - 10);
-      }
-      // Prefer Turkish audio track for native HLS (Safari)
-      try {
-        const aTracks = (video as any).audioTracks as any;
-        if (aTracks && aTracks.length) {
-          for (let i = 0; i < aTracks.length; i++) {
-            const t = aTracks[i];
-            const lang = (t.language || '').toLowerCase();
-            const label = (t.label || '').toLowerCase();
-            const isTr = lang === 'tr' || label.includes('türk');
-            aTracks[i].enabled = isTr;
-          }
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 90,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1000 * 1000,
+        maxBufferHole: 0.5,
+        highBufferWatchdogPeriod: 2,
+        nudgeMaxRetry: 5,
+        xhrSetup: (xhr) => {
+          xhr.withCredentials = false;
+          xhr.timeout = 20000;
         }
-      } catch {}
-    };
-    const handlePlay = () => {
-      setIsPlaying(true);
-      // Start progress update interval
-      if (onProgressUpdate && !progressUpdateInterval.current) {
-        progressUpdateInterval.current = setInterval(() => {
-          if (video.currentTime > 0 && video.duration > 0) {
-            onProgressUpdate(video.currentTime, video.duration);
-          }
-        }, 5000); // Update every 5 seconds
-      }
-    };
-    const handlePause = () => {
-      setIsPlaying(false);
-      // Save progress on pause
-      if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
-        onProgressUpdate(video.currentTime, video.duration);
-      }
-    };
-    const handleCanPlay = () => {
-      setIsReady(true);
-      if (loadingTimeout) {
-        clearTimeout(loadingTimeout);
-        loadingTimeout = null;
-      }
-      console.log('[VideoPlayer] Video ready to play');
-    };
+      });
 
-    // Web Audio API for volume boost (guard against cross-origin errors)
-    if (!audioContextRef.current) {
-      try {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const source = audioContext.createMediaElementSource(video);
-        const gainNode = audioContext.createGain();
-        source.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        audioContextRef.current = audioContext;
-        gainNodeRef.current = gainNode;
-        gainNode.gain.value = volume;
-      } catch (e) {
-        // Disable boost gracefully if not allowed by CORS
-        audioContextRef.current = null;
-        gainNodeRef.current = null;
-      }
-    }
-    
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('canplay', handleCanPlay);
+      hlsRef.current = hls;
+      hls.loadSource(cleanSrc);
+      hls.attachMedia(videoElement);
 
-    // Determine format - HLS includes m3u8 files
-    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
-    const isDASH = /\.mpd(\?|$)/i.test(normalizedSrc);
-    const isMP4 = /\.mp4(\?|$)/i.test(normalizedSrc);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log('[VideoPlayer] Ready');
+        setIsReady(true);
+        if (initialProgress > 0) {
+          setTimeout(() => {
+            videoElement.currentTime = initialProgress;
+          }, 100);
+        }
+      });
 
-    try {
-      if (isHLS && Hls.isSupported()) {
-        let hls = new Hls({
-          debug: false,
-          enableWorker: true,
-          lowLatencyMode: false,
-          xhrSetup: function(xhr) {
-            xhr.withCredentials = false;
-          },
-        });
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error('[VideoPlayer] Error:', data.type, data.details);
         
-        hlsRef.current = hls;
-        hls.loadSource(normalizedSrc);
-        hls.attachMedia(video);
-
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (loadingTimeout) {
-            clearTimeout(loadingTimeout);
-            loadingTimeout = null;
-          }
-          setIsReady(true);
-          console.log('[VideoPlayer] HLS ready to play');
-          // Auto play after manifest is ready
-          video.play().catch(e => console.log('Autoplay prevented:', e));
-        });
-
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          console.error('[VideoPlayer] HLS Error:', data.type, data.details);
-          if (data.fatal) {
-            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-              console.log('[VideoPlayer] Network error, retrying...');
-              hls.startLoad();
-            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-              console.log('[VideoPlayer] Media error, recovering...');
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              setTimeout(() => hls.startLoad(), 1000);
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();
-            } else {
-              setError("Video yüklenemedi. Lütfen sayfayı yenileyin.");
+              break;
+            default:
               hls.destroy();
-            }
+              setIsReady(false);
+              break;
           }
-        });
+        }
+      });
 
-        return () => {
-          if (loadingTimeout) clearTimeout(loadingTimeout);
-          video.removeEventListener('timeupdate', handleTimeUpdate);
-          video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-          video.removeEventListener('play', handlePlay);
-          video.removeEventListener('pause', handlePause);
-          video.removeEventListener('canplay', handleCanPlay);
-          if (hls) {
-            hls.destroy();
-            hlsRef.current = null;
-          }
-        };
-      } else if (isDASH) {
-        const player = dashjs.MediaPlayer().create();
-        player.initialize(video, normalizedSrc, true);
-        
-        player.on('error', (e: any) => {
-          setError("Video yüklenemedi. Lütfen daha sonra tekrar deneyin.");
-        });
-
-        return () => {
-          video.removeEventListener('timeupdate', handleTimeUpdate);
-          video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-          video.removeEventListener('play', handlePlay);
-          video.removeEventListener('pause', handlePause);
-          video.removeEventListener('canplay', handleCanPlay);
-          player.destroy();
-        };
-      } else if (isMP4) {
-        video.src = normalizedSrc;
-        video.load();
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        const candidates = getHlsCandidates(normalizedSrc);
-        let idx = 0;
-        const setNativeSrc = (u: string) => { video.src = u; video.load(); };
-        nativeErrorHandler = () => {
-          idx++;
-          const next = candidates[idx];
-          if (next) {
-            setNativeSrc(next);
-          } else {
-            setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
-            if (nativeErrorHandler) video.removeEventListener('error', nativeErrorHandler as any);
-          }
-        };
-        video.addEventListener('error', nativeErrorHandler as any);
-        setNativeSrc(candidates[0]);
-      } else {
-        setError("Bu video formatı desteklenmiyor.");
-      }
-    } catch (err) {
-      setError("Video oynatıcı başlatılamadı.");
+    } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+      videoElement.src = cleanSrc;
+      setIsReady(true);
     }
 
-      return () => {
-        if (loadingTimeout) clearTimeout(loadingTimeout);
-        video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-        video.removeEventListener('play', handlePlay);
-        video.removeEventListener('pause', handlePause);
-        video.removeEventListener('canplay', handleCanPlay);
-        if (nativeErrorHandler) { try { video.removeEventListener('error', nativeErrorHandler as any); } catch {} }
-        
-        // Clear progress update interval
-        if (progressUpdateInterval.current) {
-          clearInterval(progressUpdateInterval.current);
-          progressUpdateInterval.current = null;
-        }
-        
-        // Save final progress
-        if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
-          onProgressUpdate(video.currentTime, video.duration);
-        }
-      };
-  }, [src, onProgressUpdate, initialProgress]);
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+      }
+    };
+  }, [src, initialProgress]);
 
   const skipTime = (seconds: number) => {
     if (videoRef.current) {
