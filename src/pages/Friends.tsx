@@ -57,18 +57,42 @@ const Friends = () => {
   const loadFriends = async () => {
     if (!user) return;
     
-    const { data } = await supabase
+    // Get friendships where current user is the requester
+    const { data: sentFriends } = await supabase
       .from("friends")
-      .select("*, friend_profile:profiles!friends_friend_id_fkey(username, avatar_url)")
+      .select("*")
       .eq("user_id", user.id)
       .eq("status", "accepted");
 
-    if (data) {
-      setFriends(data.map(d => ({
-        ...d,
-        friend_profile: d.friend_profile as any,
-        requester_profile: null
-      })));
+    // Get friendships where current user is the receiver
+    const { data: receivedFriends } = await supabase
+      .from("friends")
+      .select("*")
+      .eq("friend_id", user.id)
+      .eq("status", "accepted");
+
+    const allFriendships = [...(sentFriends || []), ...(receivedFriends || [])];
+    
+    if (allFriendships.length > 0) {
+      const friendsWithProfiles = await Promise.all(
+        allFriendships.map(async (friendship) => {
+          // Determine which ID is the friend's ID
+          const friendUserId = friendship.user_id === user.id ? friendship.friend_id : friendship.user_id;
+          
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("username, avatar_url")
+            .eq("user_id", friendUserId)
+            .maybeSingle();
+          
+          return {
+            ...friendship,
+            friend_profile: profile,
+            requester_profile: null
+          };
+        })
+      );
+      setFriends(friendsWithProfiles);
     }
     setLoading(false);
   };
@@ -121,6 +145,22 @@ const Friends = () => {
       return;
     }
 
+    // Check if friendship already exists in either direction
+    const { data: existingFriendship } = await supabase
+      .from("friends")
+      .select("*")
+      .or(`and(user_id.eq.${user.id},friend_id.eq.${profiles.user_id}),and(user_id.eq.${profiles.user_id},friend_id.eq.${user.id})`)
+      .maybeSingle();
+
+    if (existingFriendship) {
+      if (existingFriendship.status === "accepted") {
+        toast({ variant: "destructive", title: "Zaten arkadaşsınız" });
+      } else {
+        toast({ variant: "destructive", title: "Zaten arkadaşlık isteği var" });
+      }
+      return;
+    }
+
     const { error } = await supabase.from("friends").insert({
       user_id: user.id,
       friend_id: profiles.user_id,
@@ -128,11 +168,7 @@ const Friends = () => {
     });
 
     if (error) {
-      if (error.code === "23505") {
-        toast({ variant: "destructive", title: "Zaten arkadaş isteği gönderildi" });
-      } else {
-        toast({ variant: "destructive", title: "Hata", description: error.message });
-      }
+      toast({ variant: "destructive", title: "Hata", description: error.message });
     } else {
       toast({ title: "Başarılı", description: "Arkadaşlık isteği gönderildi" });
       setSearchEmail("");
