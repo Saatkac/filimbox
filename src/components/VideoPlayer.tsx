@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
+import Hls from "hls.js";
+import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
@@ -11,9 +13,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
-// HLS.js loaded from CDN
-declare const Hls: any;
+// Cookie helpers
+const getCookie = (name: string): string | null => {
+  const parts = document.cookie ? document.cookie.split('; ') : [];
+  for (const part of parts) {
+    const eqIndex = part.indexOf('=');
+    if (eqIndex > -1) {
+      const key = part.substring(0, eqIndex);
+      const val = part.substring(eqIndex + 1);
+      if (key === name) return decodeURIComponent(val);
+    }
+  }
+  return null;
+};
+const setCookie = (name: string, value: string, days = 365) => {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+};
 
 interface VideoPlayerProps {
   src: string;
@@ -25,7 +44,7 @@ interface VideoPlayerProps {
 const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const hlsRef = useRef<any>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -35,181 +54,396 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [isReady, setIsReady] = useState(false);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
+  const { user } = useAuth();
+  const [seekTooltip, setSeekTooltip] = useState<{ show: boolean; time: number; position: number }>({ 
+    show: false, 
+    time: 0, 
+    position: 0 
+  });
 
-  // Clean and normalize video URL
-  const normalizeUrl = (url: string) => {
-    if (!url) return url;
-    const cleanUrl = url.trim();
-    console.log('[VideoPlayer] Using URL:', cleanUrl);
-    return cleanUrl;
+  const normalizeUrl = (u: string) => {
+    if (!u) return u;
+    let out = u.trim();
+    // Decode HTML entities
+    out = out.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+    // Fix missing protocol
+    if (/^ttps?:\/\//i.test(out)) out = 'h' + out;
+    if (/^\/\//.test(out)) out = 'https:' + out;
+    
+    // Remove problematic query parameters (vt, etc.)
+    try {
+      const urlObj = new URL(out);
+      // Remove vt and other tracking/problematic parameters
+      urlObj.searchParams.delete('vt');
+      urlObj.searchParams.delete('utm_source');
+      urlObj.searchParams.delete('utm_medium');
+      urlObj.searchParams.delete('utm_campaign');
+      out = urlObj.toString();
+    } catch (e) {
+      // If URL parsing fails, continue with original
+      console.log('[VideoPlayer] URL parse failed, using original:', out);
+    }
+    
+    // Auto-fix common HLS URL patterns from M3U imports
+    if (!/\.m3u8(\?|$)/i.test(out)) {
+      if (out.endsWith('/')) out = out + 'index.m3u8';
+      if (/\/main\/?$/i.test(out)) out = out.replace(/\/main\/?$/i, '/main/index.m3u8');
+      if (/\/master$/i.test(out)) out = out + '.m3u8';
+    }
+    
+    console.log('[VideoPlayer] Normalized URL:', out);
+    return out;
   };
 
-  // Format time for display
-  const formatTime = (seconds: number) => {
-    if (!isFinite(seconds)) return "0:00";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    if (h > 0) {
-      return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  const getHlsCandidates = (u: string): string[] => {
+    const url = u.trim();
+    const list: string[] = [];
+    const push = (x: string) => { if (!list.includes(x)) list.push(x); };
+
+    if (/\.m3u8(\?|$)/i.test(url)) return [url];
+
+    // Trailing slash like /vs/ttxxxx/ -> try fetching master playlist
+    if (url.endsWith('/')) {
+      push(url + 'master.m3u8');
+      push(url + 'index.m3u8');
+      push(url + '720.m3u8');
     }
-    return `${m}:${s.toString().padStart(2, "0")}`;
+
+    // "/main" endings
+    if (/\/main\/?$/i.test(url)) {
+      push(url.replace(/\/main\/?$/i, '/main/master.m3u8'));
+      push(url.replace(/\/main\/?$/i, '/main/index.m3u8'));
+      push(url.replace(/\/main\/?$/i, '/main/720.m3u8'));
+    }
+
+    // "master" without extension
+    if (/\/master$/i.test(url) && !/\.m3u8(\?|$)/i.test(url)) {
+      push(url + '.m3u8');
+    }
+
+    return list.length ? list : [url];
+  };
+
+  // Prefer Turkish audio track when available (Hls.js)
+  const selectTurkish = (hls: Hls) => {
+    try {
+      const tracks = (hls as any).audioTracks as Array<any> | undefined;
+      if (!tracks || !tracks.length) return;
+      let idx = tracks.findIndex(t => (t.lang || '').toLowerCase() === 'tr' || (t.name || '').toLowerCase().includes('türk'));
+      if (idx < 0) idx = tracks.findIndex(t => t.default);
+      if (idx >= 0) (hls as any).audioTrack = idx;
+    } catch {}
   };
 
   useEffect(() => {
-    if (!videoRef.current || !src) {
-      console.log('[VideoPlayer] No video element or src');
-      return;
-    }
+    if (!videoRef.current || !src) return;
 
     const video = videoRef.current;
-    const videoUrl = normalizeUrl(src);
+    const normalizedSrc = normalizeUrl(src);
+    let nativeErrorHandler: ((e: Event) => void) | null = null;
+    let loadingTimeout: NodeJS.Timeout | null = null;
     setError(null);
+    setIsReady(false);
 
-    console.log('[VideoPlayer] Initializing video player');
+    console.log('[VideoPlayer] Initializing video with source:', normalizedSrc);
 
-    // Event handlers
-    const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      if (onProgressUpdate && video.duration > 0) {
+    // Set loading timeout - if video doesn't start within 20 seconds, show error
+    loadingTimeout = setTimeout(() => {
+      if (!isReady) {
+        console.error('[VideoPlayer] Loading timeout - video did not start within 20 seconds');
+        setError("Video yüklenemedi. Kaynak sunucuya erişilemiyor.");
+      }
+    }, 20000);
+
+    // Video event listeners
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+      // Seek to initial progress if provided
+      if (initialProgress > 0 && video.duration > 0) {
+        video.currentTime = Math.min(initialProgress, video.duration - 10);
+      }
+      // Prefer Turkish audio track for native HLS (Safari)
+      try {
+        const aTracks = (video as any).audioTracks as any;
+        if (aTracks && aTracks.length) {
+          for (let i = 0; i < aTracks.length; i++) {
+            const t = aTracks[i];
+            const lang = (t.language || '').toLowerCase();
+            const label = (t.label || '').toLowerCase();
+            const isTr = lang === 'tr' || label.includes('türk');
+            aTracks[i].enabled = isTr;
+          }
+        }
+      } catch {}
+    };
+    const handlePlay = () => {
+      setIsPlaying(true);
+      // Start progress update interval
+      if (onProgressUpdate && !progressUpdateInterval.current) {
+        progressUpdateInterval.current = setInterval(() => {
+          if (video.currentTime > 0 && video.duration > 0) {
+            onProgressUpdate(video.currentTime, video.duration);
+          }
+        }, 5000); // Update every 5 seconds
+      }
+    };
+    const handlePause = () => {
+      setIsPlaying(false);
+      // Save progress on pause
+      if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
         onProgressUpdate(video.currentTime, video.duration);
       }
     };
-    
-    const handleLoadedMetadata = () => {
-      console.log('[VideoPlayer] Metadata loaded, duration:', video.duration);
-      setDuration(video.duration);
-      if (initialProgress > 0) {
-        video.currentTime = Math.min(initialProgress, video.duration - 1);
+    const handleCanPlay = () => {
+      setIsReady(true);
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+        loadingTimeout = null;
       }
-    };
-    
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleError = (e: Event) => {
-      console.error('[VideoPlayer] Video error:', e);
-      setError("Video yüklenemedi. Lütfen başka bir video deneyin.");
+      console.log('[VideoPlayer] Video ready to play');
     };
 
-    // Attach event listeners
+    // Web Audio API for volume boost (guard against cross-origin errors)
+    if (!audioContextRef.current) {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const source = audioContext.createMediaElementSource(video);
+        const gainNode = audioContext.createGain();
+        source.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        audioContextRef.current = audioContext;
+        gainNodeRef.current = gainNode;
+        gainNode.gain.value = volume;
+      } catch (e) {
+        // Disable boost gracefully if not allowed by CORS
+        audioContextRef.current = null;
+        gainNodeRef.current = null;
+      }
+    }
+    
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
-    video.addEventListener('error', handleError);
+    video.addEventListener('canplay', handleCanPlay);
 
-    // Initialize HLS player
-    const isHLS = videoUrl.includes('.m3u8');
-    
-    if (isHLS && Hls.isSupported()) {
-      console.log('[VideoPlayer] Initializing HLS for:', videoUrl);
-      
-      const hls = new Hls({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000,
-        maxBufferHole: 0.5,
-      });
+    // Determine format - HLS includes m3u8 files
+    const isHLS = /\.m3u8?(\?|$)/i.test(normalizedSrc);
+    const isDASH = /\.mpd(\?|$)/i.test(normalizedSrc);
+    const isMP4 = /\.mp4(\?|$)/i.test(normalizedSrc);
 
-      hls.loadSource(videoUrl);
-      hls.attachMedia(video);
-      hlsRef.current = hls;
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('[VideoPlayer] HLS manifest loaded successfully');
-      });
-
-      hls.on(Hls.Events.ERROR, (event, data) => {
-        console.error('[VideoPlayer] HLS error:', data.type, data.details, data);
+    try {
+      if (isHLS && Hls.isSupported()) {
+        let hls = new Hls({
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: false,
+          xhrSetup: function(xhr) {
+            xhr.withCredentials = false;
+          },
+        });
         
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[VideoPlayer] Network error, attempting recovery...');
-              // Try to reload after a short delay
-              setTimeout(() => {
-                if (hlsRef.current) {
-                  console.log('[VideoPlayer] Retrying with startLoad()');
-                  hlsRef.current.startLoad();
-                }
-              }, 1000);
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[VideoPlayer] Media error, attempting recovery...');
-              hls.recoverMediaError();
-              break;
-            default:
-              console.error('[VideoPlayer] Fatal error, cannot recover');
-              setError("Video sunucusuna erişilemiyor. Bu video şu anda izlenemiyor.");
-              hls.destroy();
-              break;
+        hlsRef.current = hls;
+        hls.loadSource(normalizedSrc);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (loadingTimeout) {
+            clearTimeout(loadingTimeout);
+            loadingTimeout = null;
           }
-        }
-      });
-    } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari)
-      console.log('[VideoPlayer] Using native HLS for:', videoUrl);
-      video.src = videoUrl;
-    } else {
-      // Direct playback
-      console.log('[VideoPlayer] Using direct playback for:', videoUrl);
-      video.src = videoUrl;
+          setIsReady(true);
+          console.log('[VideoPlayer] HLS ready to play');
+          // Auto play after manifest is ready
+          video.play().catch(e => console.log('Autoplay prevented:', e));
+        });
+
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          console.error('[VideoPlayer] HLS Error:', data.type, data.details);
+          if (data.fatal) {
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              console.log('[VideoPlayer] Network error, retrying...');
+              hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              console.log('[VideoPlayer] Media error, recovering...');
+              hls.recoverMediaError();
+            } else {
+              setError("Video yüklenemedi. Lütfen sayfayı yenileyin.");
+              hls.destroy();
+            }
+          }
+        });
+
+        return () => {
+          if (loadingTimeout) clearTimeout(loadingTimeout);
+          video.removeEventListener('timeupdate', handleTimeUpdate);
+          video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+          video.removeEventListener('play', handlePlay);
+          video.removeEventListener('pause', handlePause);
+          video.removeEventListener('canplay', handleCanPlay);
+          if (hls) {
+            hls.destroy();
+            hlsRef.current = null;
+          }
+        };
+      } else if (isDASH) {
+        const player = dashjs.MediaPlayer().create();
+        player.initialize(video, normalizedSrc, true);
+        
+        player.on('error', (e: any) => {
+          setError("Video yüklenemedi. Lütfen daha sonra tekrar deneyin.");
+        });
+
+        return () => {
+          video.removeEventListener('timeupdate', handleTimeUpdate);
+          video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+          video.removeEventListener('play', handlePlay);
+          video.removeEventListener('pause', handlePause);
+          video.removeEventListener('canplay', handleCanPlay);
+          player.destroy();
+        };
+      } else if (isMP4) {
+        video.src = normalizedSrc;
+        video.load();
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        const candidates = getHlsCandidates(normalizedSrc);
+        let idx = 0;
+        const setNativeSrc = (u: string) => { video.src = u; video.load(); };
+        nativeErrorHandler = () => {
+          idx++;
+          const next = candidates[idx];
+          if (next) {
+            setNativeSrc(next);
+          } else {
+            setError("Video yüklenemedi. Lütfen farklı bir içerik deneyin.");
+            if (nativeErrorHandler) video.removeEventListener('error', nativeErrorHandler as any);
+          }
+        };
+        video.addEventListener('error', nativeErrorHandler as any);
+        setNativeSrc(candidates[0]);
+      } else {
+        setError("Bu video formatı desteklenmiyor.");
+      }
+    } catch (err) {
+      setError("Video oynatıcı başlatılamadı.");
     }
 
-    // Cleanup
-    return () => {
-      console.log('[VideoPlayer] Cleaning up');
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('error', handleError);
-      
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-    };
-  }, [src, initialProgress, onProgressUpdate]);
+      return () => {
+        if (loadingTimeout) clearTimeout(loadingTimeout);
+        video.removeEventListener('timeupdate', handleTimeUpdate);
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        video.removeEventListener('play', handlePlay);
+        video.removeEventListener('pause', handlePause);
+        video.removeEventListener('canplay', handleCanPlay);
+        if (nativeErrorHandler) { try { video.removeEventListener('error', nativeErrorHandler as any); } catch {} }
+        
+        // Clear progress update interval
+        if (progressUpdateInterval.current) {
+          clearInterval(progressUpdateInterval.current);
+          progressUpdateInterval.current = null;
+        }
+        
+        // Save final progress
+        if (onProgressUpdate && video.currentTime > 0 && video.duration > 0) {
+          onProgressUpdate(video.currentTime, video.duration);
+        }
+      };
+  }, [src, onProgressUpdate, initialProgress]);
+
+  const skipTime = (seconds: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.currentTime + seconds, duration));
+    }
+  };
 
   const togglePlay = useCallback(() => {
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
       } else {
-        videoRef.current.play().catch(e => console.error('[VideoPlayer] Play failed:', e));
+        videoRef.current.play();
       }
     }
   }, [isPlaying]);
 
+  const changePlaybackRate = useCallback((rate: number) => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = rate;
+      setPlaybackRate(rate);
+    }
+  }, []);
+
   const handleSeek = useCallback((value: number[]) => {
-    if (videoRef.current && duration > 0) {
+    if (videoRef.current) {
       videoRef.current.currentTime = value[0];
       setCurrentTime(value[0]);
     }
+  }, []);
+  
+  const handleSeekHover = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const percentage = x / rect.width;
+    const time = percentage * duration;
+    const position = (x / rect.width) * 100;
+    setSeekTooltip({ show: true, time, position });
   }, [duration]);
+  
+  const handleSeekLeave = useCallback(() => {
+    setSeekTooltip({ show: false, time: 0, position: 0 });
+  }, []);
 
   const handleVolumeChange = useCallback((value: number[]) => {
-    if (videoRef.current) {
-      const newVolume = value[0];
-      videoRef.current.volume = newVolume;
-      setVolume(newVolume);
-      setIsMuted(newVolume === 0);
+    const newVolume = Math.min(value[0], 6); // Limit to 600%
+    setVolume(newVolume);
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = newVolume;
     }
+    setIsMuted(false);
   }, []);
 
   const toggleMute = useCallback(() => {
     if (videoRef.current) {
       const newMuted = !isMuted;
-      videoRef.current.muted = newMuted;
       setIsMuted(newMuted);
+      videoRef.current.muted = newMuted;
     }
   }, [isMuted]);
+
+  useEffect(() => {
+    if (controlsTimeout) {
+      clearTimeout(controlsTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+    setControlsTimeout(timeout);
+
+    return () => {
+      if (controlsTimeout) {
+        clearTimeout(controlsTimeout);
+      }
+    };
+  }, []);
+
+  const handleMouseMove = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeout) {
+      clearTimeout(controlsTimeout);
+    }
+    const timeout = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+    setControlsTimeout(timeout);
+  }, [controlsTimeout]);
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
@@ -226,145 +460,268 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     setIsFullscreen(!isFullscreen);
   }, [isFullscreen]);
 
-  const skipTime = (seconds: number) => {
-    if (videoRef.current && duration > 0) {
-      const newTime = Math.max(0, Math.min(videoRef.current.currentTime + seconds, duration));
-      videoRef.current.currentTime = newTime;
-    }
-  };
+  // Keyboard controls
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-  const changePlaybackRate = useCallback((rate: number) => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = rate;
-      setPlaybackRate(rate);
-    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!container.contains(document.activeElement)) return;
+      
+      switch (e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          togglePlay();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          skipTime(-10);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skipTime(10);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (volume < 6) handleVolumeChange([Math.min(volume + 0.2, 6)]);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          if (volume > 0) handleVolumeChange([Math.max(volume - 0.2, 0)]);
+          break;
+        case 'f':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'm':
+          e.preventDefault();
+          toggleMute();
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, handleVolumeChange, toggleFullscreen, toggleMute, volume]);
+
+  const formatTime = useMemo(() => {
+    return (time: number) => {
+      const hours = Math.floor(time / 3600);
+      const minutes = Math.floor((time % 3600) / 60);
+      const seconds = Math.floor(time % 60);
+      
+      if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+      return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    };
   }, []);
-
-  const handleMouseMove = useCallback(() => {
-    setShowControls(true);
-    if (controlsTimeout) clearTimeout(controlsTimeout);
-    const timeout = setTimeout(() => setShowControls(false), 3000);
-    setControlsTimeout(timeout);
-  }, [controlsTimeout]);
-
-  if (error) {
-    return (
-      <div className="w-full aspect-video bg-black rounded-lg flex items-center justify-center">
-        <Alert variant="destructive" className="m-4 max-w-md">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
 
   return (
     <div 
       ref={containerRef}
-      className="relative w-full bg-black rounded-lg overflow-hidden aspect-video"
+      className="relative w-full bg-black rounded-lg overflow-hidden group aspect-video touch-none"
       onMouseMove={handleMouseMove}
+      onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
+      onTouchStart={() => {
+        setShowControls(true);
+        if (controlsTimeout) clearTimeout(controlsTimeout);
+        const timeout = setTimeout(() => setShowControls(false), 3000);
+        setControlsTimeout(timeout);
+      }}
+      tabIndex={0}
     >
-      <video
-        ref={videoRef}
-        className="w-full h-full"
-        poster={poster}
-        playsInline
-        crossOrigin="anonymous"
-        onClick={togglePlay}
-      />
-
-      {/* Controls Overlay */}
-      <div 
-        className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 transition-opacity duration-300 ${
-          showControls ? 'opacity-100' : 'opacity-0'
-        }`}
-      >
-        {/* Play/Pause Button (Center) */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <button
+      {error ? (
+        <Alert variant="destructive" className="m-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription dangerouslySetInnerHTML={{ __html: error }} />
+        </Alert>
+      ) : (
+        <>
+          <video
+            ref={videoRef}
+            poster={poster}
+            className="w-full h-full max-h-[100vh] object-contain"
+            crossOrigin="anonymous"
+            preload="auto"
+            playsInline
             onClick={togglePlay}
-            className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm flex items-center justify-center transition-all"
           >
-            {isPlaying ? (
-              <Pause className="w-8 h-8 md:w-10 md:h-10 text-white" />
-            ) : (
-              <Play className="w-8 h-8 md:w-10 md:h-10 text-white ml-1" />
-            )}
-          </button>
-        </div>
+            Tarayıcınız video oynatmayı desteklemiyor.
+          </video>
 
-        {/* Bottom Controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 space-y-2">
-          {/* Progress Bar */}
-          <Slider
-            value={[currentTime]}
-            max={duration || 100}
-            step={0.1}
-            onValueChange={handleSeek}
-            className="cursor-pointer"
-          />
+          {/* Loading Indicator */}
+          {!isReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <div className="text-gold text-lg">Video hazırlanıyor...</div>
+            </div>
+          )}
 
-          {/* Control Buttons Row */}
-          <div className="flex items-center justify-between text-white">
-            <div className="flex items-center gap-2">
-              <button onClick={togglePlay} className="hover:text-gold transition-colors">
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+          {/* Custom Controls */}
+          <div
+            className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${
+              showControls ? 'opacity-100' : 'opacity-0'
+            }`}
+          >
+            {/* Center Play/Pause Button */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <button
+                onClick={togglePlay}
+                className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gold/90 hover:bg-gold flex items-center justify-center transition-all hover:scale-110"
+              >
+                {isPlaying ? (
+                  <Pause className="w-8 h-8 md:w-10 md:h-10 text-black" />
+                ) : (
+                  <Play className="w-8 h-8 md:w-10 md:h-10 text-black ml-1" />
+                )}
               </button>
-              
-              <button onClick={() => skipTime(-10)} className="hover:text-gold transition-colors">
-                <SkipBack className="w-5 h-5" />
-              </button>
-              
-              <button onClick={() => skipTime(10)} className="hover:text-gold transition-colors">
-                <SkipForward className="w-5 h-5" />
-              </button>
+            </div>
 
-              <div className="flex items-center gap-2 ml-2">
-                <button onClick={toggleMute} className="hover:text-gold transition-colors">
-                  {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                </button>
-                <Slider
-                  value={[isMuted ? 0 : volume]}
-                  max={1}
-                  step={0.01}
-                  onValueChange={handleVolumeChange}
-                  className="w-20"
-                />
+            {/* Bottom Controls */}
+            <div className="absolute bottom-0 left-0 right-0 p-3 md:p-4 space-y-2">
+              {/* Progress Bar */}
+              <div className="flex items-center gap-2">
+                <span className="text-white text-xs md:text-sm font-medium min-w-[45px]">
+                  {formatTime(currentTime)}
+                </span>
+                <div 
+                  className="flex-1 relative"
+                  onMouseMove={handleSeekHover}
+                  onMouseLeave={handleSeekLeave}
+                >
+                  <Slider
+                    value={[currentTime]}
+                    max={duration || 100}
+                    step={0.1}
+                    onValueChange={handleSeek}
+                    className="w-full"
+                  />
+                  {seekTooltip.show && (
+                    <div 
+                      className="absolute -top-10 bg-black/90 text-white text-xs px-2 py-1 rounded pointer-events-none whitespace-nowrap"
+                      style={{ left: `${seekTooltip.position}%`, transform: 'translateX(-50%)' }}
+                    >
+                      {formatTime(seekTooltip.time)}
+                    </div>
+                  )}
+                </div>
+                <span className="text-white text-xs md:text-sm font-medium min-w-[45px]">
+                  {formatTime(duration)}
+                </span>
               </div>
 
-              <span className="text-sm ml-4">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </span>
-            </div>
+              {/* Controls Row */}
+              <div className="flex items-center justify-between gap-2 md:gap-4">
+                {/* Left Side Controls */}
+                <div className="flex items-center gap-2 md:gap-3">
+                  {/* Skip Backward */}
+                  <button
+                    onClick={() => skipTime(-10)}
+                    className="text-white hover:text-gold transition-colors"
+                    title="10 saniye geri"
+                  >
+                    <SkipBack className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
 
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-white hover:text-gold">
-                    {playbackRate}x
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuLabel>Oynatma Hızı</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-                    <DropdownMenuItem key={rate} onClick={() => changePlaybackRate(rate)}>
-                      {rate}x {rate === playbackRate && "✓"}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                  {/* Skip Forward */}
+                  <button
+                    onClick={() => skipTime(10)}
+                    className="text-white hover:text-gold transition-colors"
+                    title="10 saniye ileri"
+                  >
+                    <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
 
-              <button onClick={toggleFullscreen} className="hover:text-gold transition-colors">
-                {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-              </button>
+                  {/* Volume Control */}
+                  <div className="hidden md:flex items-center gap-2 w-[150px] lg:w-[200px]">
+                    <button
+                      onClick={toggleMute}
+                      className="text-white hover:text-gold transition-colors flex-shrink-0"
+                      title="Sesi aç/kapat (M)"
+                    >
+                      {isMuted || volume === 0 ? (
+                        <VolumeX className="w-5 h-5 md:w-6 md:h-6" />
+                      ) : (
+                        <Volume2 className="w-5 h-5 md:w-6 md:h-6" />
+                      )}
+                    </button>
+                    <div className="flex-1">
+                      <Slider
+                        value={[volume]}
+                        max={6}
+                        step={0.1}
+                        onValueChange={handleVolumeChange}
+                      />
+                    </div>
+                    <span className="text-white text-xs font-medium min-w-[40px] lg:min-w-[45px] flex-shrink-0 text-right">
+                      {Math.round((volume / 6) * 600)}%
+                    </span>
+                  </div>
+                  
+                  {/* Mobile Volume Button */}
+                  <button
+                    onClick={toggleMute}
+                    className="md:hidden text-white hover:text-gold transition-colors"
+                    title="Sesi aç/kapat"
+                  >
+                    {isMuted || volume === 0 ? (
+                      <VolumeX className="w-5 h-5" />
+                    ) : (
+                      <Volume2 className="w-5 h-5" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Right Side Controls */}
+                <div className="flex items-center gap-2 md:gap-3">
+                  {/* Playback Speed */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="text-white hover:text-gold hover:bg-white/10 h-8 px-2 text-xs md:text-sm"
+                      >
+                        {playbackRate}x
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="bg-black/95 border-gold/20">
+                      <DropdownMenuLabel className="text-gold">Oynatma Hızı</DropdownMenuLabel>
+                      <DropdownMenuSeparator className="bg-gold/20" />
+                      {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                        <DropdownMenuItem
+                          key={rate}
+                          onClick={() => changePlaybackRate(rate)}
+                          className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
+                        >
+                          {rate === playbackRate && "✓ "}{rate}x
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Fullscreen Toggle */}
+                  <button
+                    onClick={toggleFullscreen}
+                    className="text-white hover:text-gold transition-colors"
+                    title="Tam ekran (F)"
+                  >
+                    {isFullscreen ? (
+                      <Minimize className="w-5 h-5 md:w-6 md:h-6" />
+                    ) : (
+                      <Maximize className="w-5 h-5 md:w-6 md:h-6" />
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 };
 
-export default VideoPlayer;
+export default memo(VideoPlayer);
