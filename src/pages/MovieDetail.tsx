@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
-import VideoPlayer from "@/components/VideoPlayer";
+import VideoPlayer, { VideoPlayerRef } from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
 import CommentSection from "@/components/CommentSection";
 import WatchParty from "@/components/WatchParty";
@@ -41,8 +41,31 @@ const MovieDetail = () => {
   const progressInterval = useRef<NodeJS.Timeout | null>(null);
   const [activeParty, setActiveParty] = useState<string | null>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoPlayerRef = useRef<VideoPlayerRef>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+
+  // Sync handlers for watch party
+  const handleVideoPlay = useCallback((time: number) => {
+    setCurrentVideoTime(time);
+    if (activeParty) {
+      (window as any).__watchPartySync?.broadcastPlay(time);
+    }
+  }, [activeParty]);
+
+  const handleVideoPause = useCallback((time: number) => {
+    setCurrentVideoTime(time);
+    if (activeParty) {
+      (window as any).__watchPartySync?.broadcastPause(time);
+    }
+  }, [activeParty]);
+
+  const handleVideoSeek = useCallback((time: number) => {
+    setCurrentVideoTime(time);
+    if (activeParty) {
+      (window as any).__watchPartySync?.broadcastSeek(time);
+    }
+  }, [activeParty]);
 
   // Check for party param in URL (from invite)
   useEffect(() => {
@@ -335,11 +358,19 @@ const MovieDetail = () => {
           content.video_url ? (
             <div className="container mx-auto px-4 mb-8">
               <VideoPlayer
+                ref={videoPlayerRef}
                 key={content.video_url}
                 src={content.video_url}
                 poster={content.backdrop_url || content.poster_url}
                 initialProgress={watchProgress}
-                onProgressUpdate={(current, duration) => saveWatchProgress(current, duration)}
+                onProgressUpdate={(current, duration) => {
+                  setCurrentVideoTime(current);
+                  saveWatchProgress(current, duration);
+                }}
+                onPlay={handleVideoPlay}
+                onPause={handleVideoPause}
+                onSeek={handleVideoSeek}
+                onPlayingChange={setIsVideoPlaying}
               />
             </div>
           ) : (
@@ -354,11 +385,19 @@ const MovieDetail = () => {
         ) : videoSrc ? (
           <div className="container mx-auto px-4 mb-8">
             <VideoPlayer
+              ref={videoPlayerRef}
               key={videoSrc}
               src={videoSrc}
               poster={content.backdrop_url || content.poster_url}
               initialProgress={watchProgress}
-              onProgressUpdate={(current, duration) => saveWatchProgress(current, duration)}
+              onProgressUpdate={(current, duration) => {
+                setCurrentVideoTime(current);
+                saveWatchProgress(current, duration);
+              }}
+              onPlay={handleVideoPlay}
+              onPause={handleVideoPause}
+              onSeek={handleVideoSeek}
+              onPlayingChange={setIsVideoPlaying}
             />
           </div>
         ) : (
@@ -539,11 +578,16 @@ const MovieDetail = () => {
             partyId={activeParty}
             onClose={() => setActiveParty(null)}
             onSeek={(time) => {
-              if (videoRef.current) {
-                videoRef.current.currentTime = time;
-              }
+              videoPlayerRef.current?.seek(time);
+            }}
+            onPlay={() => {
+              videoPlayerRef.current?.play();
+            }}
+            onPause={() => {
+              videoPlayerRef.current?.pause();
             }}
             currentTime={currentVideoTime}
+            isPlaying={isVideoPlaying}
           />
         )}
       </div>

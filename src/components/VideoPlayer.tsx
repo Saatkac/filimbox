@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo, memo, forwardRef, useImperativeHandle } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -39,9 +39,28 @@ interface VideoPlayerProps {
   poster?: string;
   initialProgress?: number;
   onProgressUpdate?: (currentTime: number, duration: number) => void;
+  onPlay?: (time: number) => void;
+  onPause?: (time: number) => void;
+  onSeek?: (time: number) => void;
+  onPlayingChange?: (playing: boolean) => void;
 }
 
-const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: VideoPlayerProps) => {
+export interface VideoPlayerRef {
+  play: () => void;
+  pause: () => void;
+  seek: (time: number) => void;
+}
+
+const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({ 
+  src, 
+  poster, 
+  initialProgress = 0, 
+  onProgressUpdate,
+  onPlay,
+  onPause,
+  onSeek,
+  onPlayingChange
+}, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -65,6 +84,33 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     time: 0, 
     position: 0 
   });
+  const isExternalControlRef = useRef(false);
+
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    play: () => {
+      isExternalControlRef.current = true;
+      videoRef.current?.play();
+      setTimeout(() => { isExternalControlRef.current = false; }, 100);
+    },
+    pause: () => {
+      isExternalControlRef.current = true;
+      videoRef.current?.pause();
+      setTimeout(() => { isExternalControlRef.current = false; }, 100);
+    },
+    seek: (time: number) => {
+      isExternalControlRef.current = true;
+      if (videoRef.current) {
+        videoRef.current.currentTime = time;
+      }
+      setTimeout(() => { isExternalControlRef.current = false; }, 100);
+    }
+  }), []);
+
+  // Notify parent about playing state changes
+  useEffect(() => {
+    onPlayingChange?.(isPlaying);
+  }, [isPlaying, onPlayingChange]);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -223,8 +269,18 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       }
     };
 
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      if (!isExternalControlRef.current && videoRef.current) {
+        onPlay?.(videoRef.current.currentTime);
+      }
+    };
+    const handlePause = () => {
+      setIsPlaying(false);
+      if (!isExternalControlRef.current && videoRef.current) {
+        onPause?.(videoRef.current.currentTime);
+      }
+    };
 
     videoElement.addEventListener('timeupdate', handleTimeUpdate);
     videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -270,8 +326,11 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
     if (videoRef.current) {
       videoRef.current.currentTime = value[0];
       setCurrentTime(value[0]);
+      if (!isExternalControlRef.current) {
+        onSeek?.(value[0]);
+      }
     }
-  }, []);
+  }, [onSeek]);
   
   const handleSeekHover = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (!duration) return;
@@ -609,6 +668,8 @@ const VideoPlayer = ({ src, poster, initialProgress = 0, onProgressUpdate }: Vid
       )}
     </div>
   );
-};
+});
+
+VideoPlayer.displayName = 'VideoPlayer';
 
 export default memo(VideoPlayer);
