@@ -5,6 +5,7 @@ import VideoPlayer from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
 import CommentSection from "@/components/CommentSection";
 import WatchParty from "@/components/WatchParty";
+import { InviteFriendsDialog } from "@/components/InviteFriendsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ const MovieDetail = () => {
   const [activeParty, setActiveParty] = useState<string | null>(null);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
   
   const loadContent = useCallback(async () => {
     setLoading(true);
@@ -258,116 +260,16 @@ const MovieDetail = () => {
     }
   };
 
-  const startWatchParty = async () => {
-    if (!user || !id) {
+  const openInviteDialog = () => {
+    if (!user) {
       toast({ variant: "destructive", title: "Giriş yapmalısınız" });
       return;
     }
+    setShowInviteDialog(true);
+  };
 
-    setLoading(true);
-
-    try {
-      // First check if user has a profile
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (!profile) {
-        // Create profile if doesn't exist
-        const { error: createProfileError } = await supabase
-          .from("profiles")
-          .insert({
-            user_id: user.id,
-            username: user.email?.split('@')[0] || "Kullanıcı",
-            avatar_url: "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"
-          });
-
-        if (createProfileError) {
-          console.error("Profile creation error:", createProfileError);
-          toast({ variant: "destructive", title: "Profil oluşturulamadı", description: createProfileError.message });
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Check if there's already an active party for this content
-      const { data: existingParty } = await supabase
-        .from("watch_parties")
-        .select("*")
-        .eq("host_user_id", user.id)
-        .eq("is_active", true)
-        .or(isMovie ? `movie_id.eq.${id}` : `series_id.eq.${id}`)
-        .maybeSingle();
-
-      if (existingParty) {
-        setActiveParty(existingParty.id);
-        toast({ title: "Mevcut parti açıldı", description: "Zaten aktif bir izleme partiniz var" });
-        setLoading(false);
-        return;
-      }
-
-      // Insert watch party without SELECT to avoid RLS recursion
-      const partyInsert = await supabase
-        .from("watch_parties")
-        .insert({
-          host_user_id: user.id,
-          movie_id: isMovie ? id : null,
-          series_id: !isMovie ? id : null,
-          episode_id: selectedEpisode?.id || null,
-          is_active: true
-        });
-
-      if (partyInsert.error) {
-        console.error("Watch party creation error:", partyInsert.error);
-        toast({ variant: "destructive", title: "Parti oluşturulamadı", description: partyInsert.error.message });
-        setLoading(false);
-        return;
-      }
-
-      // Query the party we just created
-      const { data, error } = await supabase
-        .from("watch_parties")
-        .select("*")
-        .eq("host_user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error || !data) {
-        console.error("Watch party query error:", error);
-        toast({ variant: "destructive", title: "Parti oluşturulamadı", description: error?.message || "Parti bulunamadı" });
-        setLoading(false);
-        return;
-      }
-
-      // Join as host without SELECT to avoid RLS recursion
-      const participantInsert = await supabase
-        .from("watch_party_participants")
-        .insert({
-          party_id: data.id,
-          user_id: user.id,
-          is_host: true,
-          video_progress: currentVideoTime
-        });
-
-      if (participantInsert.error) {
-        console.error("Participant join error:", participantInsert.error);
-        toast({ variant: "destructive", title: "Partiye katılma hatası", description: participantInsert.error.message });
-        setLoading(false);
-        return;
-      }
-
-      setActiveParty(data.id);
-      toast({ title: "Başarılı", description: "İzleme partisi başlatıldı! Arkadaşlarınızı davet edebilirsiniz." });
-    } catch (err) {
-      console.error("Unexpected error:", err);
-      toast({ variant: "destructive", title: "Beklenmeyen hata", description: "Lütfen tekrar deneyin" });
-    } finally {
-      setLoading(false);
-    }
+  const handlePartyCreated = (partyId: string) => {
+    setActiveParty(partyId);
   };
 
   // Determine video source - must be before early returns (hooks rule)
@@ -474,7 +376,7 @@ const MovieDetail = () => {
                 </h1>
                 <div className="flex gap-2">
                   <Button
-                    onClick={startWatchParty}
+                    onClick={openInviteDialog}
                     variant="outline"
                     size="icon"
                     className="border-primary hover:bg-primary/20"
@@ -611,6 +513,16 @@ const MovieDetail = () => {
             </div>
           </div>
         )}
+
+        <InviteFriendsDialog
+          open={showInviteDialog}
+          onOpenChange={setShowInviteDialog}
+          onPartyCreated={handlePartyCreated}
+          movieId={isMovie ? id : undefined}
+          seriesId={!isMovie ? id : undefined}
+          episodeId={selectedEpisode?.id}
+          currentVideoTime={currentVideoTime}
+        />
 
         {activeParty && (
           <WatchParty
