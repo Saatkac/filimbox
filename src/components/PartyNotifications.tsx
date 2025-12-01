@@ -65,65 +65,86 @@ export const PartyNotifications = () => {
   const loadInvites = async () => {
     if (!user) return;
 
-    // Get pending party invitations (where user is participant but not host, party is active)
-    const { data: participations } = await supabase
-      .from("watch_party_participants")
-      .select("id, party_id, joined_at, is_host")
-      .eq("user_id", user.id)
-      .eq("is_host", false)
-      .is("left_at", null);
+    try {
+      // Simple direct query - get user's own participations only (no RLS recursion)
+      const { data: participations, error: partError } = await supabase
+        .from("watch_party_participants")
+        .select("id, party_id, joined_at, is_host")
+        .eq("user_id", user.id)
+        .eq("is_host", false)
+        .is("left_at", null);
 
-    if (!participations || participations.length === 0) {
+      if (partError) {
+        console.error("Participation query error:", partError);
+        setInvites([]);
+        return;
+      }
+
+      if (!participations || participations.length === 0) {
+        setInvites([]);
+        return;
+      }
+
+      // Get party details - separate query to avoid RLS recursion
+      const partyIds = participations.map(p => p.party_id);
+      const { data: parties, error: partyError } = await supabase
+        .from("watch_parties")
+        .select("id, host_user_id, movie_id, series_id, is_active")
+        .in("id", partyIds)
+        .eq("is_active", true);
+
+      if (partyError) {
+        console.error("Party query error:", partyError);
+        setInvites([]);
+        return;
+      }
+
+      if (!parties || parties.length === 0) {
+        setInvites([]);
+        return;
+      }
+
+      // Get host profiles and content titles - separate queries
+      const hostIds = [...new Set(parties.map(p => p.host_user_id))];
+      const movieIds = parties.filter(p => p.movie_id).map(p => p.movie_id!);
+      const seriesIds = parties.filter(p => p.series_id).map(p => p.series_id!);
+
+      const [profilesRes, moviesRes, seriesRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, username, avatar_url").in("user_id", hostIds),
+        movieIds.length > 0 ? supabase.from("movies").select("id, title").in("id", movieIds) : Promise.resolve({ data: [] }),
+        seriesIds.length > 0 ? supabase.from("series").select("id, title").in("id", seriesIds) : Promise.resolve({ data: [] })
+      ]);
+
+      const profiles = profilesRes.data || [];
+      const movies = moviesRes.data || [];
+      const series = seriesRes.data || [];
+
+      const enrichedInvites: PartyInvite[] = participations
+        .filter(p => parties.some(party => party.id === p.party_id))
+        .map(p => {
+          const party = parties.find(party => party.id === p.party_id)!;
+          const hostProfile = profiles.find(prof => prof.user_id === party.host_user_id);
+          const movie = movies.find(m => m.id === party.movie_id);
+          const seriesItem = series.find(s => s.id === party.series_id);
+
+          return {
+            id: p.id,
+            party_id: p.party_id,
+            joined_at: p.joined_at,
+            watch_parties: party,
+            host_profile: hostProfile ? {
+              username: hostProfile.username,
+              avatar_url: hostProfile.avatar_url
+            } : undefined,
+            content_title: movie?.title || seriesItem?.title || "İçerik"
+          };
+        });
+
+      setInvites(enrichedInvites);
+    } catch (err) {
+      console.error("Load invites exception:", err);
       setInvites([]);
-      return;
     }
-
-    // Get party details for each invitation
-    const partyIds = participations.map(p => p.party_id);
-    const { data: parties } = await supabase
-      .from("watch_parties")
-      .select("id, host_user_id, movie_id, series_id, is_active")
-      .in("id", partyIds)
-      .eq("is_active", true);
-
-    if (!parties || parties.length === 0) {
-      setInvites([]);
-      return;
-    }
-
-    // Get host profiles and content titles
-    const hostIds = [...new Set(parties.map(p => p.host_user_id))];
-    const movieIds = parties.filter(p => p.movie_id).map(p => p.movie_id!);
-    const seriesIds = parties.filter(p => p.series_id).map(p => p.series_id!);
-
-    const [{ data: profiles }, { data: movies }, { data: series }] = await Promise.all([
-      supabase.from("profiles").select("user_id, username, avatar_url").in("user_id", hostIds),
-      movieIds.length > 0 ? supabase.from("movies").select("id, title").in("id", movieIds) : { data: [] },
-      seriesIds.length > 0 ? supabase.from("series").select("id, title").in("id", seriesIds) : { data: [] }
-    ]);
-
-    const enrichedInvites: PartyInvite[] = participations
-      .filter(p => parties.some(party => party.id === p.party_id))
-      .map(p => {
-        const party = parties.find(party => party.id === p.party_id)!;
-        const hostProfile = profiles?.find(prof => prof.user_id === party.host_user_id);
-        const movie = movies?.find(m => m.id === party.movie_id);
-        const seriesItem = series?.find(s => s.id === party.series_id);
-
-        return {
-          id: p.id,
-          party_id: p.party_id,
-          joined_at: p.joined_at,
-          watch_parties: party,
-          host_profile: hostProfile ? {
-            username: hostProfile.username,
-            avatar_url: hostProfile.avatar_url
-          } : undefined,
-          content_title: movie?.title || seriesItem?.title || "İçerik"
-        };
-      });
-
-    setInvites(enrichedInvites);
   };
 
   const acceptInvite = (invite: PartyInvite) => {

@@ -9,15 +9,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Loader2 } from "lucide-react";
 
-// Simple UUID generator
-const generateUUID = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
-
 interface Friend {
   id: string;
   user_id: string;
@@ -110,76 +101,28 @@ export const InviteFriendsDialog = ({
     setCreating(true);
 
     try {
-      // Create profile if doesn't exist
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // Use edge function to create party and invite friends (bypasses RLS restrictions)
+      const { data, error } = await supabase.functions.invoke("invite-to-party", {
+        body: {
+          movieId: movieId || null,
+          seriesId: seriesId || null,
+          episodeId: episodeId || null,
+          friendIds: Array.from(selectedFriends),
+          currentVideoTime
+        }
+      });
 
-      if (!profile) {
-        await supabase.from("profiles").insert({
-          user_id: user.id,
-          username: user.email?.split('@')[0] || "Kullanıcı",
-          avatar_url: "https://www.hdfilmizle.life/assets/front/img/default-pp.webp"
-        });
+      if (error) {
+        console.error("Edge function error:", error);
+        throw new Error(error.message || "Parti oluşturulamadı");
       }
 
-      // Generate party ID client-side to avoid SELECT after INSERT (RLS recursion issue)
-      const partyId = generateUUID();
-
-      // Create watch party with pre-generated ID (no SELECT needed)
-      const { error: partyError } = await supabase
-        .from("watch_parties")
-        .insert({
-          id: partyId,
-          host_user_id: user.id,
-          movie_id: movieId || null,
-          series_id: seriesId || null,
-          episode_id: episodeId || null,
-          is_active: true
-        });
-
-      if (partyError) {
-        console.error("Watch party creation error:", partyError);
-        throw new Error(`Parti oluşturulamadı: ${partyError.message}`);
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
-      // Join as host
-      const { error: hostJoinError } = await supabase
-        .from("watch_party_participants")
-        .insert({
-          party_id: partyId,
-          user_id: user.id,
-          is_host: true,
-          video_progress: currentVideoTime
-        });
-
-      if (hostJoinError) {
-        console.error("Host join error:", hostJoinError);
-        throw new Error(`Host partiye katılamadı: ${hostJoinError.message}`);
-      }
-
-      // Add selected friends as participants
-      const invites = Array.from(selectedFriends).map(friendId => ({
-        party_id: partyId,
-        user_id: friendId,
-        is_host: false,
-        video_progress: 0
-      }));
-
-      const { error: invitesError } = await supabase
-        .from("watch_party_participants")
-        .insert(invites);
-
-      if (invitesError) {
-        console.error("Invites error:", invitesError);
-        // Don't throw here - party is created, just log the error
-        toast({ 
-          variant: "destructive",
-          title: "Davetlerde sorun oluştu", 
-          description: "Parti oluşturuldu ama bazı arkadaşlar eklenemedi" 
-        });
+      if (!data?.partyId) {
+        throw new Error("Parti ID alınamadı");
       }
 
       toast({ 
@@ -187,15 +130,16 @@ export const InviteFriendsDialog = ({
         description: `${selectedFriends.size} arkadaşınız davet edildi` 
       });
 
-      onPartyCreated(partyId);
+      onPartyCreated(data.partyId);
       onOpenChange(false);
       setSelectedFriends(new Set());
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Party creation error:", error);
+      const message = error instanceof Error ? error.message : "Bilinmeyen hata";
       toast({ 
         variant: "destructive", 
         title: "Parti oluşturulamadı", 
-        description: error.message 
+        description: message 
       });
     } finally {
       setCreating(false);

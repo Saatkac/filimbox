@@ -1,0 +1,1 @@
+ALTER TABLE public.watch_parties ENABLE ROW LEVEL SECURITY
