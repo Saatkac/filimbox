@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import VideoPlayer from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
@@ -26,6 +26,7 @@ interface Episode {
 
 const MovieDetail = () => {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
   const [content, setContent] = useState<any>(null);
@@ -42,6 +43,15 @@ const MovieDetail = () => {
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [showInviteDialog, setShowInviteDialog] = useState(false);
+
+  // Check for party param in URL (from invite)
+  useEffect(() => {
+    const partyId = searchParams.get('party');
+    if (partyId && user) {
+      setActiveParty(partyId);
+      toast({ title: "Partiye katıldınız!" });
+    }
+  }, [searchParams, user]);
   
   const loadContent = useCallback(async () => {
     setLoading(true);

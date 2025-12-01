@@ -97,33 +97,65 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
   }, [messages]);
 
   const loadParticipants = async () => {
-    const { data } = await supabase
-      .from("watch_party_participants")
-      .select("*, profiles!inner(username, avatar_url)")
-      .eq("party_id", partyId)
-      .is("left_at", null);
+    try {
+      const { data, error } = await supabase
+        .from("watch_party_participants")
+        .select("id, user_id, video_progress, is_host, joined_at")
+        .eq("party_id", partyId)
+        .is("left_at", null);
 
-    if (data) {
-      setParticipants(data.map(d => ({
-        ...d,
-        profiles: d.profiles as any
-      })));
+      if (error) {
+        console.error("Load participants error:", error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Load profiles separately to avoid RLS issues
+        const userIds = data.map(d => d.user_id);
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, username, avatar_url")
+          .in("user_id", userIds);
+
+        setParticipants(data.map(d => ({
+          ...d,
+          profiles: profiles?.find(p => p.user_id === d.user_id) || null
+        })));
+      }
+    } catch (err) {
+      console.error("Load participants exception:", err);
     }
   };
 
   const loadMessages = async () => {
-    const { data } = await supabase
-      .from("party_messages")
-      .select("*, profiles!inner(username, avatar_url)")
-      .eq("party_id", partyId)
-      .order("created_at", { ascending: true })
-      .limit(100);
+    try {
+      const { data, error } = await supabase
+        .from("party_messages")
+        .select("id, user_id, message, created_at")
+        .eq("party_id", partyId)
+        .order("created_at", { ascending: true })
+        .limit(100);
 
-    if (data) {
-      setMessages(data.map(d => ({
-        ...d,
-        profiles: d.profiles as any
-      })));
+      if (error) {
+        console.error("Load messages error:", error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Load profiles separately
+        const userIds = [...new Set(data.map(d => d.user_id))];
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, username, avatar_url")
+          .in("user_id", userIds);
+
+        setMessages(data.map(d => ({
+          ...d,
+          profiles: profiles?.find(p => p.user_id === d.user_id) || null
+        })));
+      }
+    } catch (err) {
+      console.error("Load messages exception:", err);
     }
   };
 
@@ -149,9 +181,15 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
       });
 
     if (error) {
-      toast({ variant: "destructive", title: "Mesaj gönderilemedi" });
+      console.error("Message send error:", error);
+      toast({ 
+        variant: "destructive", 
+        title: "Mesaj gönderilemedi",
+        description: error.message
+      });
     } else {
       setNewMessage("");
+      loadMessages(); // Manually reload messages
     }
   };
 

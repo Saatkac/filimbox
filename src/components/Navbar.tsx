@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { PartyNotifications } from "./PartyNotifications";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -66,6 +67,7 @@ const Navbar = () => {
                     Admin
                   </Button>
                 )}
+                <PartyNotifications />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="focus:outline-none">
