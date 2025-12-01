@@ -116,8 +116,8 @@ export const InviteFriendsDialog = ({
         });
       }
 
-      // Create watch party (INSERT only, no SELECT)
-      const partyInsert = await supabase
+      // Create watch party and get ID in one query
+      const { data: createdParty, error: partyError } = await supabase
         .from("watch_parties")
         .insert({
           host_user_id: user.id,
@@ -125,28 +125,21 @@ export const InviteFriendsDialog = ({
           series_id: seriesId || null,
           episode_id: episodeId || null,
           is_active: true
-        });
-
-      if (partyInsert.error) {
-        throw partyInsert.error;
-      }
-
-      // Get the party ID by querying only with host_user_id (simplest query)
-      const { data: createdParty } = await supabase
-        .from("watch_parties")
+        })
         .select("id")
-        .eq("host_user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
+        .maybeSingle();
+
+      if (partyError) {
+        console.error("Watch party creation error:", partyError);
+        throw new Error(`Parti oluşturulamadı: ${partyError.message}`);
+      }
 
       if (!createdParty) {
-        throw new Error("Parti oluşturuldu ama ID alınamadı");
+        throw new Error("Parti oluşturuldu ancak yanıt alınamadı");
       }
 
-      // Join as host (INSERT only)
-      await supabase
+      // Join as host
+      const { error: hostJoinError } = await supabase
         .from("watch_party_participants")
         .insert({
           party_id: createdParty.id,
@@ -154,6 +147,11 @@ export const InviteFriendsDialog = ({
           is_host: true,
           video_progress: currentVideoTime
         });
+
+      if (hostJoinError) {
+        console.error("Host join error:", hostJoinError);
+        throw new Error(`Host partiye katılamadı: ${hostJoinError.message}`);
+      }
 
       // Add selected friends as participants
       const invites = Array.from(selectedFriends).map(friendId => ({
@@ -163,9 +161,19 @@ export const InviteFriendsDialog = ({
         video_progress: 0
       }));
 
-      await supabase
+      const { error: invitesError } = await supabase
         .from("watch_party_participants")
         .insert(invites);
+
+      if (invitesError) {
+        console.error("Invites error:", invitesError);
+        // Don't throw here - party is created, just log the error
+        toast({ 
+          variant: "destructive",
+          title: "Davetlerde sorun oluştu", 
+          description: "Parti oluşturuldu ama bazı arkadaşlar eklenemedi" 
+        });
+      }
 
       toast({ 
         title: "Parti oluşturuldu!", 
