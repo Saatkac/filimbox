@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Send, Video, VideoOff, Mic, MicOff, X, Minimize2, Maximize2, MessageSquare } from "lucide-react";
+import { Users, Send, Video, VideoOff, Mic, MicOff, X, Minimize2, MessageSquare, GripHorizontal } from "lucide-react";
 import Draggable from "react-draggable";
 
 interface Participant {
@@ -36,15 +36,13 @@ interface WatchPartyProps {
   partyId: string;
   onClose: () => void;
   onSeek: (time: number) => void;
+  onPlay: () => void;
+  onPause: () => void;
   currentTime: number;
+  isPlaying: boolean;
 }
 
-interface PeerConnection {
-  pc: RTCPeerConnection;
-  remoteStream: MediaStream;
-}
-
-const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) => {
+const WatchParty = ({ partyId, onClose, onSeek, onPlay, onPause, currentTime, isPlaying }: WatchPartyProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -54,60 +52,160 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [chatMinimized, setChatMinimized] = useState(false);
   const [videoMinimized, setVideoMinimized] = useState(false);
+  const [isHost, setIsHost] = useState(false);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const peerConnectionsRef = useRef<Map<string, PeerConnection>>(new Map());
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const signalingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const syncChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const lastSyncRef = useRef<number>(0);
+  const nodeRef = useRef(null);
+  const chatNodeRef = useRef(null);
 
-  // ICE servers for WebRTC
-  const iceServers = {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-    ]
-  };
-
-  // Initialize signaling channel for WebRTC
+  // Initialize sync channel
   useEffect(() => {
     if (!user) return;
 
-    const channel = supabase.channel(`party-signaling-${partyId}`, {
+    const channel = supabase.channel(`party-sync-${partyId}`, {
       config: { broadcast: { self: false } }
     });
 
     channel
-      .on('broadcast', { event: 'offer' }, async ({ payload }) => {
-        if (payload.to === user.id) {
-          console.log('Received offer from', payload.from);
-          await handleOffer(payload.from, payload.sdp);
+      .on('broadcast', { event: 'play' }, ({ payload }) => {
+        console.log('Received play from', payload.from, 'at', payload.time);
+        if (payload.from !== user.id) {
+          onSeek(payload.time);
+          onPlay();
+          toast({ title: `${payload.username || 'Kullanıcı'} videoyu başlattı` });
         }
       })
-      .on('broadcast', { event: 'answer' }, async ({ payload }) => {
-        if (payload.to === user.id) {
-          console.log('Received answer from', payload.from);
-          await handleAnswer(payload.from, payload.sdp);
+      .on('broadcast', { event: 'pause' }, ({ payload }) => {
+        console.log('Received pause from', payload.from, 'at', payload.time);
+        if (payload.from !== user.id) {
+          onPause();
+          onSeek(payload.time);
+          toast({ title: `${payload.username || 'Kullanıcı'} videoyu durdurdu` });
         }
       })
-      .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
-        if (payload.to === user.id) {
-          console.log('Received ICE candidate from', payload.from);
-          await handleIceCandidate(payload.from, payload.candidate);
+      .on('broadcast', { event: 'seek' }, ({ payload }) => {
+        console.log('Received seek from', payload.from, 'to', payload.time);
+        if (payload.from !== user.id) {
+          onSeek(payload.time);
+          toast({ title: `${payload.username || 'Kullanıcı'} ${Math.floor(payload.time / 60)}:${Math.floor(payload.time % 60).toString().padStart(2, '0')}'e atladı` });
         }
       })
-      .on('broadcast', { event: 'media-state' }, ({ payload }) => {
-        console.log('Media state update from', payload.from, payload);
+      .on('broadcast', { event: 'sync-request' }, ({ payload }) => {
+        // Host responds to sync requests
+        if (isHost && payload.from !== user.id) {
+          channel.send({
+            type: 'broadcast',
+            event: 'sync-response',
+            payload: {
+              from: user.id,
+              to: payload.from,
+              time: currentTime,
+              isPlaying
+            }
+          });
+        }
+      })
+      .on('broadcast', { event: 'sync-response' }, ({ payload }) => {
+        if (payload.to === user.id) {
+          console.log('Sync response:', payload);
+          onSeek(payload.time);
+          if (payload.isPlaying) {
+            onPlay();
+          } else {
+            onPause();
+          }
+        }
       })
       .subscribe();
 
-    signalingChannelRef.current = channel;
+    syncChannelRef.current = channel;
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, partyId]);
+  }, [user, partyId, isHost]);
+
+  // Request sync on join
+  useEffect(() => {
+    if (syncChannelRef.current && user && !isHost) {
+      setTimeout(() => {
+        syncChannelRef.current?.send({
+          type: 'broadcast',
+          event: 'sync-request',
+          payload: { from: user.id }
+        });
+      }, 1000);
+    }
+  }, [isHost, user]);
+
+  // Broadcast play/pause/seek
+  const broadcastPlay = useCallback((time: number) => {
+    const now = Date.now();
+    if (now - lastSyncRef.current < 500) return;
+    lastSyncRef.current = now;
+    
+    const myProfile = participants.find(p => p.user_id === user?.id);
+    syncChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'play',
+      payload: { 
+        from: user?.id, 
+        time,
+        username: myProfile?.profiles?.username
+      }
+    });
+  }, [user?.id, participants]);
+
+  const broadcastPause = useCallback((time: number) => {
+    const now = Date.now();
+    if (now - lastSyncRef.current < 500) return;
+    lastSyncRef.current = now;
+    
+    const myProfile = participants.find(p => p.user_id === user?.id);
+    syncChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'pause',
+      payload: { 
+        from: user?.id, 
+        time,
+        username: myProfile?.profiles?.username
+      }
+    });
+  }, [user?.id, participants]);
+
+  const broadcastSeek = useCallback((time: number) => {
+    const now = Date.now();
+    if (now - lastSyncRef.current < 500) return;
+    lastSyncRef.current = now;
+    
+    const myProfile = participants.find(p => p.user_id === user?.id);
+    syncChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'seek',
+      payload: { 
+        from: user?.id, 
+        time,
+        username: myProfile?.profiles?.username
+      }
+    });
+  }, [user?.id, participants]);
+
+  // Expose broadcast functions to parent via window
+  useEffect(() => {
+    (window as any).__watchPartySync = {
+      broadcastPlay,
+      broadcastPause,
+      broadcastSeek
+    };
+    return () => {
+      delete (window as any).__watchPartySync;
+    };
+  }, [broadcastPlay, broadcastPause, broadcastSeek]);
 
   // Load participants and messages
   useEffect(() => {
@@ -140,122 +238,16 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
       })
       .subscribe();
 
-    const progressInterval = setInterval(() => {
-      updateProgress(currentTime);
-    }, 2000);
-
     return () => {
       supabase.removeChannel(participantsChannel);
       supabase.removeChannel(messagesChannel);
-      clearInterval(progressInterval);
       stopMedia();
-      closePeerConnections();
     };
-  }, [user, partyId, currentTime]);
+  }, [user, partyId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  const closePeerConnections = () => {
-    peerConnectionsRef.current.forEach((conn) => {
-      conn.pc.close();
-    });
-    peerConnectionsRef.current.clear();
-    setRemoteStreams(new Map());
-  };
-
-  const createPeerConnection = useCallback((remoteUserId: string): RTCPeerConnection => {
-    console.log('Creating peer connection for', remoteUserId);
-    const pc = new RTCPeerConnection(iceServers);
-    const remoteStream = new MediaStream();
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate && signalingChannelRef.current) {
-        signalingChannelRef.current.send({
-          type: 'broadcast',
-          event: 'ice-candidate',
-          payload: {
-            from: user?.id,
-            to: remoteUserId,
-            candidate: event.candidate
-          }
-        });
-      }
-    };
-
-    pc.ontrack = (event) => {
-      console.log('Received remote track', event.track.kind);
-      remoteStream.addTrack(event.track);
-      setRemoteStreams(prev => new Map(prev).set(remoteUserId, remoteStream));
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log('ICE connection state:', pc.iceConnectionState);
-    };
-
-    // Add local tracks if available
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => {
-        pc.addTrack(track, localStreamRef.current!);
-      });
-    }
-
-    peerConnectionsRef.current.set(remoteUserId, { pc, remoteStream });
-    return pc;
-  }, [user?.id]);
-
-  const handleOffer = async (fromUserId: string, sdp: RTCSessionDescriptionInit) => {
-    let peerConn = peerConnectionsRef.current.get(fromUserId);
-    if (!peerConn) {
-      const pc = createPeerConnection(fromUserId);
-      peerConn = peerConnectionsRef.current.get(fromUserId)!;
-    }
-
-    await peerConn.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await peerConn.pc.createAnswer();
-    await peerConn.pc.setLocalDescription(answer);
-
-    signalingChannelRef.current?.send({
-      type: 'broadcast',
-      event: 'answer',
-      payload: {
-        from: user?.id,
-        to: fromUserId,
-        sdp: answer
-      }
-    });
-  };
-
-  const handleAnswer = async (fromUserId: string, sdp: RTCSessionDescriptionInit) => {
-    const peerConn = peerConnectionsRef.current.get(fromUserId);
-    if (peerConn) {
-      await peerConn.pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    }
-  };
-
-  const handleIceCandidate = async (fromUserId: string, candidate: RTCIceCandidateInit) => {
-    const peerConn = peerConnectionsRef.current.get(fromUserId);
-    if (peerConn) {
-      await peerConn.pc.addIceCandidate(new RTCIceCandidate(candidate));
-    }
-  };
-
-  const initiateCall = async (remoteUserId: string) => {
-    const pc = createPeerConnection(remoteUserId);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    signalingChannelRef.current?.send({
-      type: 'broadcast',
-      event: 'offer',
-      payload: {
-        from: user?.id,
-        to: remoteUserId,
-        sdp: offer
-      }
-    });
-  };
 
   const loadParticipants = async () => {
     try {
@@ -277,10 +269,16 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
           .select("user_id, username, avatar_url")
           .in("user_id", userIds);
 
-        setParticipants(data.map(d => ({
+        const participantsWithProfiles = data.map(d => ({
           ...d,
           profiles: profiles?.find(p => p.user_id === d.user_id) || null
-        })));
+        }));
+
+        setParticipants(participantsWithProfiles);
+        
+        // Check if current user is host
+        const myParticipation = data.find(d => d.user_id === user?.id);
+        setIsHost(myParticipation?.is_host || false);
       }
     } catch (err) {
       console.error("Load participants exception:", err);
@@ -318,16 +316,6 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
     }
   };
 
-  const updateProgress = async (time: number) => {
-    if (!user) return;
-    
-    await supabase
-      .from("watch_party_participants")
-      .update({ video_progress: time })
-      .eq("party_id", partyId)
-      .eq("user_id", user.id);
-  };
-
   const sendMessage = async () => {
     if (!user || !newMessage.trim()) return;
 
@@ -344,12 +332,11 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
         });
 
       if (error) {
-        console.error("Message send error:", error.message, error.code, error.details);
+        console.error("Message send error:", error.message);
         setNewMessage(messageText);
         toast({ 
           variant: "destructive", 
-          title: "Mesaj gönderilemedi",
-          description: error.message
+          title: "Mesaj gönderilemedi"
         });
       } else {
         const newMsg: Message = {
@@ -357,25 +344,48 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
           user_id: user.id,
           message: messageText,
           created_at: new Date().toISOString(),
-          profiles: null
+          profiles: participants.find(p => p.user_id === user.id)?.profiles || null
         };
         setMessages(prev => [...prev, newMsg]);
       }
     } catch (err) {
       console.error("Message send exception:", err);
       setNewMessage(messageText);
-      toast({ 
-        variant: "destructive", 
-        title: "Mesaj gönderilemedi"
-      });
     }
+  };
+
+  const handleClose = async () => {
+    // Leave the party
+    if (user) {
+      await supabase
+        .from("watch_party_participants")
+        .update({ left_at: new Date().toISOString() })
+        .eq("party_id", partyId)
+        .eq("user_id", user.id);
+      
+      // If host, end the party
+      if (isHost) {
+        await supabase
+          .from("watch_parties")
+          .update({ is_active: false, ended_at: new Date().toISOString() })
+          .eq("id", partyId);
+      }
+    }
+    
+    stopMedia();
+    onClose();
   };
 
   const startMedia = async (video: boolean, audio: boolean) => {
     try {
+      // Stop existing tracks first
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: video ? { width: 320, height: 240 } : false, 
-        audio 
+        video: video ? { width: 320, height: 240, facingMode: 'user' } : false, 
+        audio: audio ? { echoCancellation: true, noiseSuppression: true } : false
       });
       
       localStreamRef.current = stream;
@@ -384,31 +394,6 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
         localVideoRef.current.srcObject = stream;
       }
 
-      // Add tracks to existing peer connections
-      peerConnectionsRef.current.forEach((conn) => {
-        stream.getTracks().forEach(track => {
-          conn.pc.addTrack(track, stream);
-        });
-      });
-
-      // Initiate calls to all other participants
-      participants.forEach(p => {
-        if (p.user_id !== user?.id) {
-          initiateCall(p.user_id);
-        }
-      });
-
-      // Notify others about media state
-      signalingChannelRef.current?.send({
-        type: 'broadcast',
-        event: 'media-state',
-        payload: {
-          from: user?.id,
-          video,
-          audio
-        }
-      });
-
       return true;
     } catch (error) {
       console.error('Media access error:', error);
@@ -416,7 +401,10 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
     }
   };
 
-  const toggleVideo = async () => {
+  const toggleVideo = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
     if (!videoEnabled) {
       const success = await startMedia(true, audioEnabled);
       if (success) {
@@ -426,13 +414,19 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
         toast({ variant: "destructive", title: "Kamera erişimi reddedildi" });
       }
     } else {
-      localStreamRef.current?.getVideoTracks().forEach(track => track.stop());
+      localStreamRef.current?.getVideoTracks().forEach(track => {
+        track.stop();
+        localStreamRef.current?.removeTrack(track);
+      });
       setVideoEnabled(false);
       toast({ title: "Kamera kapatıldı" });
     }
   };
 
-  const toggleAudio = async () => {
+  const toggleAudio = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
     if (!audioEnabled) {
       const success = await startMedia(videoEnabled, true);
       if (success) {
@@ -442,7 +436,10 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
         toast({ variant: "destructive", title: "Mikrofon erişimi reddedildi" });
       }
     } else {
-      localStreamRef.current?.getAudioTracks().forEach(track => track.stop());
+      localStreamRef.current?.getAudioTracks().forEach(track => {
+        track.stop();
+        localStreamRef.current?.removeTrack(track);
+      });
       setAudioEnabled(false);
       toast({ title: "Mikrofon kapatıldı" });
     }
@@ -455,44 +452,27 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
     setAudioEnabled(false);
   };
 
-  const remoteVideoElements = Array.from(remoteStreams.entries()).map(([oderId, stream]) => {
-    const participant = participants.find(p => p.user_id === oderId);
-    return (
-      <div key={oderId} className="relative">
-        <video
-          autoPlay
-          playsInline
-          className="w-32 h-24 bg-black rounded object-cover"
-          ref={(el) => {
-            if (el) el.srcObject = stream;
-          }}
-        />
-        <span className="absolute bottom-1 left-1 text-xs bg-black/70 px-1 rounded">
-          {participant?.profiles?.username || "Kullanıcı"}
-        </span>
-      </div>
-    );
-  });
-
   return (
     <>
       {/* Video Panel - Draggable */}
       {(videoEnabled || remoteStreams.size > 0) && !videoMinimized && (
-        <Draggable handle=".drag-handle" bounds="parent">
-          <div className="fixed top-20 right-4 z-50 bg-card border-2 border-primary rounded-lg overflow-hidden shadow-2xl">
-            <div className="drag-handle bg-primary/20 p-2 flex justify-between items-center cursor-move">
-              <span className="text-sm font-medium">Video Sohbet</span>
-              <div className="flex gap-1">
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setVideoMinimized(true)}>
+        <Draggable handle=".video-drag-handle" bounds="parent" nodeRef={nodeRef}>
+          <div ref={nodeRef} className="fixed top-20 right-80 z-50 bg-card border-2 border-primary rounded-lg overflow-hidden shadow-2xl">
+            <div className="video-drag-handle bg-primary/20 p-2 flex justify-between items-center cursor-move">
+              <div className="flex items-center gap-2">
+                <GripHorizontal className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Video</span>
+              </div>
+              <div className="flex gap-1" onMouseDown={e => e.stopPropagation()}>
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setVideoMinimized(true); }}>
                   <Minimize2 className="w-3 h-3" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={stopMedia}>
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); stopMedia(); }}>
                   <X className="w-3 h-3" />
                 </Button>
               </div>
             </div>
-            <div className="p-2 space-y-2">
-              {/* Local video */}
+            <div className="p-2">
               {videoEnabled && (
                 <div className="relative">
                   <video 
@@ -500,17 +480,13 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
                     autoPlay 
                     muted 
                     playsInline
-                    className="w-40 h-30 bg-black rounded object-cover"
+                    className="w-48 h-36 bg-black rounded object-cover"
                   />
                   <span className="absolute bottom-1 left-1 text-xs bg-black/70 px-1 rounded">Sen</span>
                 </div>
               )}
-              {/* Remote videos */}
-              <div className="flex flex-wrap gap-2">
-                {remoteVideoElements}
-              </div>
             </div>
-            <div className="flex gap-2 p-2 bg-background/95 border-t">
+            <div className="flex gap-2 p-2 bg-background/95 border-t" onMouseDown={e => e.stopPropagation()}>
               <Button size="sm" variant={videoEnabled ? "default" : "secondary"} onClick={toggleVideo}>
                 {videoEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
               </Button>
@@ -525,71 +501,73 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
       {/* Minimized video indicator */}
       {videoMinimized && (videoEnabled || remoteStreams.size > 0) && (
         <Button 
-          className="fixed top-20 right-4 z-50" 
+          className="fixed top-20 right-80 z-50" 
           size="sm"
           onClick={() => setVideoMinimized(false)}
         >
           <Video className="w-4 h-4 mr-2" />
-          Video ({remoteStreams.size + (videoEnabled ? 1 : 0)})
+          Video
         </Button>
       )}
 
       {/* Chat Panel - Draggable */}
       {!chatMinimized ? (
-        <Draggable handle=".chat-drag-handle" bounds="parent">
-          <Card className="fixed bottom-4 right-4 w-80 h-[400px] z-40 flex flex-col shadow-2xl">
-            <div className="chat-drag-handle p-3 border-b flex justify-between items-center bg-primary/10 cursor-move">
+        <Draggable handle=".chat-drag-handle" bounds="parent" nodeRef={chatNodeRef}>
+          <Card ref={chatNodeRef} className="fixed bottom-4 right-4 w-72 h-[360px] z-40 flex flex-col shadow-2xl">
+            <div className="chat-drag-handle p-2 border-b flex justify-between items-center bg-primary/10 cursor-move">
               <div className="flex items-center gap-2">
+                <GripHorizontal className="w-4 h-4 text-muted-foreground" />
                 <Users className="w-4 h-4 text-primary" />
                 <h3 className="font-semibold text-sm">Parti ({participants.length})</h3>
+                {isHost && <span className="text-xs text-primary">👑</span>}
               </div>
-              <div className="flex gap-1">
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={toggleVideo}>
+              <div className="flex gap-1" onMouseDown={e => e.stopPropagation()}>
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={toggleVideo}>
                   {videoEnabled ? <Video className="w-3 h-3" /> : <VideoOff className="w-3 h-3" />}
                 </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={toggleAudio}>
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={toggleAudio}>
                   {audioEnabled ? <Mic className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
                 </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setChatMinimized(true)}>
+                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setChatMinimized(true); }}>
                   <Minimize2 className="w-3 h-3" />
                 </Button>
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={onClose}>
+                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={(e) => { e.stopPropagation(); handleClose(); }}>
                   <X className="w-3 h-3" />
                 </Button>
               </div>
             </div>
 
-            <div className="p-2 border-b bg-muted/50">
+            <div className="p-1.5 border-b bg-muted/50 max-h-16 overflow-y-auto">
               <div className="flex gap-1 flex-wrap">
                 {participants.map(p => (
-                  <div key={p.id} className="flex items-center gap-1 bg-background px-2 py-0.5 rounded-full text-xs">
+                  <div key={p.id} className="flex items-center gap-1 bg-background px-1.5 py-0.5 rounded-full text-[10px]">
                     <Avatar className="w-4 h-4">
                       <AvatarImage src={p.profiles?.avatar_url || ""} />
                       <AvatarFallback className="text-[8px]">{p.profiles?.username?.[0] || "?"}</AvatarFallback>
                     </Avatar>
-                    <span className="max-w-[60px] truncate">{p.profiles?.username || "Kullanıcı"}</span>
-                    {p.is_host && <span className="text-primary">👑</span>}
+                    <span className="max-w-[50px] truncate">{p.profiles?.username || "Kullanıcı"}</span>
+                    {p.is_host && <span>👑</span>}
                   </div>
                 ))}
               </div>
             </div>
 
-            <ScrollArea className="flex-1 p-3">
+            <ScrollArea className="flex-1 p-2">
               <div className="space-y-2">
                 {messages.map((msg) => (
-                  <div key={msg.id} className="flex gap-2">
-                    <Avatar className="w-6 h-6 flex-shrink-0">
+                  <div key={msg.id} className="flex gap-1.5">
+                    <Avatar className="w-5 h-5 flex-shrink-0">
                       <AvatarImage src={msg.profiles?.avatar_url || ""} />
-                      <AvatarFallback className="text-[10px]">{msg.profiles?.username?.[0] || "?"}</AvatarFallback>
+                      <AvatarFallback className="text-[8px]">{msg.profiles?.username?.[0] || "?"}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-1">
-                        <span className="text-xs font-medium truncate">{msg.profiles?.username || "Kullanıcı"}</span>
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[10px] font-medium truncate">{msg.profiles?.username || "Kullanıcı"}</span>
+                        <span className="text-[9px] text-muted-foreground">
                           {new Date(msg.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <p className="text-xs text-muted-foreground break-words">{msg.message}</p>
+                      <p className="text-[11px] text-muted-foreground break-words">{msg.message}</p>
                     </div>
                   </div>
                 ))}
@@ -597,15 +575,15 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
               </div>
             </ScrollArea>
 
-            <div className="p-2 border-t flex gap-2">
+            <div className="p-2 border-t flex gap-1.5" onMouseDown={e => e.stopPropagation()}>
               <Input
                 placeholder="Mesaj yazın..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-                className="h-8 text-sm"
+                className="h-7 text-xs"
               />
-              <Button size="icon" className="h-8 w-8" onClick={sendMessage}>
+              <Button size="icon" className="h-7 w-7" onClick={sendMessage}>
                 <Send className="w-3 h-3" />
               </Button>
             </div>
