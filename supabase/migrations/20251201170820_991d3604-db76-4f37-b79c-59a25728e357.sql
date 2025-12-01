@@ -1,0 +1,1 @@
+ALTER TABLE public.watch_party_participants DISABLE ROW LEVEL SECURITY
