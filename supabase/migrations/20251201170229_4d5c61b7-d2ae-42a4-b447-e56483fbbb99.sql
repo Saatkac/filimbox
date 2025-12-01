@@ -1,0 +1,1 @@
+ALTER TABLE public.party_messages ENABLE ROW LEVEL SECURITY

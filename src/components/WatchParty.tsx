@@ -172,24 +172,44 @@ const WatchParty = ({ partyId, onClose, onSeek, currentTime }: WatchPartyProps) 
   const sendMessage = async () => {
     if (!user || !newMessage.trim()) return;
 
-    const { error } = await supabase
-      .from("party_messages")
-      .insert({
-        party_id: partyId,
-        user_id: user.id,
-        message: newMessage.trim()
-      });
+    const messageText = newMessage.trim();
+    setNewMessage(""); // Clear immediately for better UX
 
-    if (error) {
-      console.error("Message send error:", error);
+    try {
+      const { error } = await supabase
+        .from("party_messages")
+        .insert({
+          party_id: partyId,
+          user_id: user.id,
+          message: messageText
+        });
+
+      if (error) {
+        console.error("Message send error:", error.message, error.code, error.details);
+        setNewMessage(messageText); // Restore on error
+        toast({ 
+          variant: "destructive", 
+          title: "Mesaj gönderilemedi",
+          description: error.message
+        });
+      } else {
+        // Immediately add message to local state for instant feedback
+        const newMsg: Message = {
+          id: crypto.randomUUID(),
+          user_id: user.id,
+          message: messageText,
+          created_at: new Date().toISOString(),
+          profiles: null // Will be updated on next load
+        };
+        setMessages(prev => [...prev, newMsg]);
+      }
+    } catch (err) {
+      console.error("Message send exception:", err);
+      setNewMessage(messageText);
       toast({ 
         variant: "destructive", 
-        title: "Mesaj gönderilemedi",
-        description: error.message
+        title: "Mesaj gönderilemedi"
       });
-    } else {
-      setNewMessage("");
-      loadMessages(); // Manually reload messages
     }
   };
 
