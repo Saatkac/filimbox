@@ -308,7 +308,8 @@ const MovieDetail = () => {
         return;
       }
 
-      const { data, error } = await supabase
+      // Insert watch party without SELECT to avoid RLS recursion
+      const partyInsert = await supabase
         .from("watch_parties")
         .insert({
           host_user_id: user.id,
@@ -316,19 +317,34 @@ const MovieDetail = () => {
           series_id: !isMovie ? id : null,
           episode_id: selectedEpisode?.id || null,
           is_active: true
-        })
-        .select()
-        .single();
+        });
 
-      if (error) {
-        console.error("Watch party creation error:", error);
-        toast({ variant: "destructive", title: "Parti oluşturulamadı", description: error.message });
+      if (partyInsert.error) {
+        console.error("Watch party creation error:", partyInsert.error);
+        toast({ variant: "destructive", title: "Parti oluşturulamadı", description: partyInsert.error.message });
         setLoading(false);
         return;
       }
 
-      // Host olarak katıl
-      const { error: participantError } = await supabase
+      // Query the party we just created
+      const { data, error } = await supabase
+        .from("watch_parties")
+        .select("*")
+        .eq("host_user_id", user.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !data) {
+        console.error("Watch party query error:", error);
+        toast({ variant: "destructive", title: "Parti oluşturulamadı", description: error?.message || "Parti bulunamadı" });
+        setLoading(false);
+        return;
+      }
+
+      // Join as host without SELECT to avoid RLS recursion
+      const participantInsert = await supabase
         .from("watch_party_participants")
         .insert({
           party_id: data.id,
@@ -337,9 +353,9 @@ const MovieDetail = () => {
           video_progress: currentVideoTime
         });
 
-      if (participantError) {
-        console.error("Participant join error:", participantError);
-        toast({ variant: "destructive", title: "Partiye katılma hatası", description: participantError.message });
+      if (participantInsert.error) {
+        console.error("Participant join error:", participantInsert.error);
+        toast({ variant: "destructive", title: "Partiye katılma hatası", description: participantInsert.error.message });
         setLoading(false);
         return;
       }
