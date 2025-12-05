@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, Chrome, CheckCircle2, AlertCircle, Loader2, Smartphone } from 'lucide-react';
+import { Download, Chrome, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
 
 // Chrome extension API type declaration
@@ -32,21 +32,14 @@ export const ExtensionPopup = () => {
   const [open, setOpen] = useState(false);
   const [hasExtension, setHasExtension] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Mobil cihaz kontrolü
-    const mobileCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    setIsMobile(mobileCheck);
-
     // Daha önce gösterildi mi kontrol et
     const wasShown = localStorage.getItem(POPUP_SHOWN_KEY);
     if (wasShown) return;
 
-    // Eklenti yüklü mü kontrol et (sadece masaüstü)
-    if (!mobileCheck) {
-      checkExtension();
-    }
+    // Eklenti yüklü mü kontrol et
+    checkExtension();
 
     // Popup'ı göster
     const timer = setTimeout(() => {
@@ -108,39 +101,8 @@ export const ExtensionPopup = () => {
     setOpen(false);
   };
 
-  // Mobil görünüm - APK indirme bilgisi
-  const MobileContent = () => (
-    <>
-      <div className="flex items-start gap-3 p-4 bg-primary/10 border border-primary/20 rounded-lg">
-        <Smartphone className="w-6 h-6 text-primary shrink-0 mt-0.5" />
-        <div>
-          <p className="font-medium text-primary">Mobil Uygulama</p>
-          <p className="text-sm text-muted-foreground">
-            Tüm videolara sorunsuz erişim için FilimBox uygulamasını indirin.
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <h4 className="font-medium text-foreground">APK Kurulum Adımları:</h4>
-        <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-          <li>APK dosyasını indirin</li>
-          <li>İndirilenler klasöründe APK'yı bulun</li>
-          <li>Dosyaya tıklayarak yükleyin</li>
-          <li>"Bilinmeyen kaynaklara izin ver" seçeneğini açın</li>
-          <li>Kurulumu tamamlayın</li>
-        </ol>
-      </div>
-
-      <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
-        <p className="font-medium text-foreground mb-1">⚠️ Not:</p>
-        <p>APK dosyası hazırlanıyor. Yakında bu sayfadan indirebileceksiniz.</p>
-      </div>
-    </>
-  );
-
-  // Masaüstü görünüm - Chrome eklentisi
-  const DesktopContent = () => (
+  // Eklenti içeriği
+  const ExtensionContent = () => (
     <>
       {hasExtension ? (
         <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
@@ -204,28 +166,16 @@ export const ExtensionPopup = () => {
       <DialogContent className="sm:max-w-md bg-background border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
-            {isMobile ? (
-              <>
-                <Smartphone className="w-6 h-6 text-primary" />
-                FilimBox Uygulaması
-              </>
-            ) : (
-              <>
-                <Chrome className="w-6 h-6 text-primary" />
-                Video Player Eklentisi
-              </>
-            )}
+            <Chrome className="w-6 h-6 text-primary" />
+            Video Player Eklentisi
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            {isMobile 
-              ? 'Tüm videoların sorunsuz oynatılması için uygulamayı yükleyin'
-              : 'Tüm videoların sorunsuz oynatılması için Chrome eklentisini yükleyin'
-            }
+            Tüm videoların sorunsuz oynatılması için eklentiyi yükleyin
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {isMobile ? <MobileContent /> : <DesktopContent />}
+          <ExtensionContent />
         </div>
 
         <div className="flex justify-end">
