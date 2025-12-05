@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, Chrome, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, Chrome, CheckCircle2, AlertCircle, Loader2, Smartphone } from 'lucide-react';
 import JSZip from 'jszip';
 
 // Chrome extension API type declaration
@@ -32,18 +32,21 @@ export const ExtensionPopup = () => {
   const [open, setOpen] = useState(false);
   const [hasExtension, setHasExtension] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Sadece bilgisayardan girişte göster
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    if (isMobile) return;
+    // Mobil cihaz kontrolü
+    const mobileCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    setIsMobile(mobileCheck);
 
     // Daha önce gösterildi mi kontrol et
     const wasShown = localStorage.getItem(POPUP_SHOWN_KEY);
     if (wasShown) return;
 
-    // Eklenti yüklü mü kontrol et
-    checkExtension();
+    // Eklenti yüklü mü kontrol et (sadece masaüstü)
+    if (!mobileCheck) {
+      checkExtension();
+    }
 
     // Popup'ı göster
     const timer = setTimeout(() => {
@@ -55,7 +58,6 @@ export const ExtensionPopup = () => {
   }, []);
 
   const checkExtension = () => {
-    // Chrome eklentisi ile iletişim dene
     const chromeApi = window.chrome;
     if (chromeApi?.runtime?.sendMessage) {
       try {
@@ -76,7 +78,6 @@ export const ExtensionPopup = () => {
     try {
       const zip = new JSZip();
       
-      // Tüm dosyaları fetch et ve zip'e ekle
       const fetchPromises = EXTENSION_FILES.map(async (filename) => {
         const response = await fetch(`/extension/${filename}`);
         if (response.ok) {
@@ -87,7 +88,6 @@ export const ExtensionPopup = () => {
       
       await Promise.all(fetchPromises);
       
-      // ZIP dosyasını oluştur ve indir
       const content = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(content);
       const link = document.createElement('a');
@@ -108,74 +108,124 @@ export const ExtensionPopup = () => {
     setOpen(false);
   };
 
+  // Mobil görünüm - APK indirme bilgisi
+  const MobileContent = () => (
+    <>
+      <div className="flex items-start gap-3 p-4 bg-primary/10 border border-primary/20 rounded-lg">
+        <Smartphone className="w-6 h-6 text-primary shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium text-primary">Mobil Uygulama</p>
+          <p className="text-sm text-muted-foreground">
+            Tüm videolara sorunsuz erişim için FilimBox uygulamasını indirin.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <h4 className="font-medium text-foreground">APK Kurulum Adımları:</h4>
+        <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+          <li>APK dosyasını indirin</li>
+          <li>İndirilenler klasöründe APK'yı bulun</li>
+          <li>Dosyaya tıklayarak yükleyin</li>
+          <li>"Bilinmeyen kaynaklara izin ver" seçeneğini açın</li>
+          <li>Kurulumu tamamlayın</li>
+        </ol>
+      </div>
+
+      <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+        <p className="font-medium text-foreground mb-1">⚠️ Not:</p>
+        <p>APK dosyası hazırlanıyor. Yakında bu sayfadan indirebileceksiniz.</p>
+      </div>
+    </>
+  );
+
+  // Masaüstü görünüm - Chrome eklentisi
+  const DesktopContent = () => (
+    <>
+      {hasExtension ? (
+        <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <CheckCircle2 className="w-6 h-6 text-green-500" />
+          <div>
+            <p className="font-medium text-green-500">Eklenti Yüklü</p>
+            <p className="text-sm text-muted-foreground">Video oynatma hazır</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <AlertCircle className="w-6 h-6 text-yellow-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-yellow-500">Eklenti Gerekli</p>
+              <p className="text-sm text-muted-foreground">
+                Bazı videolar CORS kısıtlamaları nedeniyle oynatılamayabilir. 
+                Eklentiyi yükleyerek tüm videolara erişebilirsiniz.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="font-medium text-foreground">Kurulum Adımları:</h4>
+            <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+              <li>Aşağıdaki butona tıklayarak ZIP dosyasını indirin</li>
+              <li>İndirilen ZIP dosyasını bir klasöre çıkartın</li>
+              <li>Chrome'da <code className="bg-muted px-1.5 py-0.5 rounded text-xs">chrome://extensions</code> adresine gidin</li>
+              <li>Sağ üstten "Geliştirici modu"nu açın</li>
+              <li>"Paketlenmemiş öğe yükle" butonuna tıklayın</li>
+              <li>Çıkarttığınız klasörü seçin</li>
+              <li>Sayfayı yenileyin</li>
+            </ol>
+          </div>
+
+          <Button 
+            onClick={handleDownload} 
+            className="w-full" 
+            size="lg"
+            disabled={isDownloading}
+          >
+            {isDownloading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                İndiriliyor...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4 mr-2" />
+                Eklentiyi İndir (ZIP)
+              </>
+            )}
+          </Button>
+        </>
+      )}
+    </>
+  );
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-md bg-background border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
-            <Chrome className="w-6 h-6 text-primary" />
-            Video Player Eklentisi
+            {isMobile ? (
+              <>
+                <Smartphone className="w-6 h-6 text-primary" />
+                FilimBox Uygulaması
+              </>
+            ) : (
+              <>
+                <Chrome className="w-6 h-6 text-primary" />
+                Video Player Eklentisi
+              </>
+            )}
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Tüm videoların sorunsuz oynatılması için Chrome eklentisini yükleyin
+            {isMobile 
+              ? 'Tüm videoların sorunsuz oynatılması için uygulamayı yükleyin'
+              : 'Tüm videoların sorunsuz oynatılması için Chrome eklentisini yükleyin'
+            }
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {hasExtension ? (
-            <div className="flex items-center gap-3 p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-              <CheckCircle2 className="w-6 h-6 text-green-500" />
-              <div>
-                <p className="font-medium text-green-500">Eklenti Yüklü</p>
-                <p className="text-sm text-muted-foreground">Video oynatma hazır</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-start gap-3 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                <AlertCircle className="w-6 h-6 text-yellow-500 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-yellow-500">Eklenti Gerekli</p>
-                  <p className="text-sm text-muted-foreground">
-                    Bazı videolar CORS kısıtlamaları nedeniyle oynatılamayabilir. 
-                    Eklentiyi yükleyerek tüm videolara erişebilirsiniz.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="font-medium text-foreground">Kurulum Adımları:</h4>
-                <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-                  <li>Aşağıdaki butona tıklayarak ZIP dosyasını indirin</li>
-                  <li>İndirilen ZIP dosyasını bir klasöre çıkartın</li>
-                  <li>Chrome'da <code className="bg-muted px-1.5 py-0.5 rounded text-xs">chrome://extensions</code> adresine gidin</li>
-                  <li>Sağ üstten "Geliştirici modu"nu açın</li>
-                  <li>"Paketlenmemiş öğe yükle" butonuna tıklayın</li>
-                  <li>Çıkarttığınız klasörü seçin</li>
-                  <li>Sayfayı yenileyin</li>
-                </ol>
-              </div>
-
-              <Button 
-                onClick={handleDownload} 
-                className="w-full" 
-                size="lg"
-                disabled={isDownloading}
-              >
-                {isDownloading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    İndiriliyor...
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4 mr-2" />
-                    Eklentiyi İndir (ZIP)
-                  </>
-                )}
-              </Button>
-            </>
-          )}
+          {isMobile ? <MobileContent /> : <DesktopContent />}
         </div>
 
         <div className="flex justify-end">

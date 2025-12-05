@@ -1,17 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import VideoPlayer, { VideoPlayerRef } from "@/components/VideoPlayer";
 import MovieCard from "@/components/MovieCard";
 import CommentSection from "@/components/CommentSection";
-import WatchParty from "@/components/WatchParty";
-import { InviteFriendsDialog } from "@/components/InviteFriendsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Star, Clock, Calendar, ArrowLeft, Play, Heart, Users } from "lucide-react";
+import { Star, Clock, Calendar, ArrowLeft, Play, Heart } from "lucide-react";
 
 interface Episode {
   id: string;
@@ -26,7 +24,6 @@ interface Episode {
 
 const MovieDetail = () => {
   const { id } = useParams();
-  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const { toast } = useToast();
   const [content, setContent] = useState<any>(null);
@@ -39,42 +36,7 @@ const MovieDetail = () => {
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
   const [watchProgress, setWatchProgress] = useState<number>(0);
   const progressInterval = useRef<NodeJS.Timeout | null>(null);
-  const [activeParty, setActiveParty] = useState<string | null>(null);
-  const [currentVideoTime, setCurrentVideoTime] = useState(0);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const videoPlayerRef = useRef<VideoPlayerRef>(null);
-  const [showInviteDialog, setShowInviteDialog] = useState(false);
-
-  // Sync handlers for watch party
-  const handleVideoPlay = useCallback((time: number) => {
-    setCurrentVideoTime(time);
-    if (activeParty) {
-      (window as any).__watchPartySync?.broadcastPlay(time);
-    }
-  }, [activeParty]);
-
-  const handleVideoPause = useCallback((time: number) => {
-    setCurrentVideoTime(time);
-    if (activeParty) {
-      (window as any).__watchPartySync?.broadcastPause(time);
-    }
-  }, [activeParty]);
-
-  const handleVideoSeek = useCallback((time: number) => {
-    setCurrentVideoTime(time);
-    if (activeParty) {
-      (window as any).__watchPartySync?.broadcastSeek(time);
-    }
-  }, [activeParty]);
-
-  // Check for party param in URL (from invite)
-  useEffect(() => {
-    const partyId = searchParams.get('party');
-    if (partyId && user) {
-      setActiveParty(partyId);
-      toast({ title: "Partiye katıldınız!" });
-    }
-  }, [searchParams, user]);
   
   const loadContent = useCallback(async () => {
     setLoading(true);
@@ -82,7 +44,6 @@ const MovieDetail = () => {
     try {
       console.log("MovieDetail: loading content", { id });
 
-      // Try to load as movie first
       const { data: movieData } = await supabase
         .from("movies")
         .select("*")
@@ -99,7 +60,6 @@ const MovieDetail = () => {
         setSelectedEpisode(null);
         currentCategory = movieData.category ?? null;
       } else {
-        // If not found, try series
         const { data: seriesData } = await supabase
           .from("series")
           .select("*")
@@ -112,7 +72,6 @@ const MovieDetail = () => {
           setIsMovie(false);
           currentCategory = seriesData.category ?? null;
 
-          // Fetch episodes for the series
           const { data: episodesData, error: episodesErr } = await supabase
             .from("episodes")
             .select("*")
@@ -138,7 +97,6 @@ const MovieDetail = () => {
         }
       }
 
-      // Load similar content (based on category when available)
       if (currentCategory) {
         const [{ data: moviesData }, { data: seriesData }] = await Promise.all([
           supabase
@@ -293,19 +251,6 @@ const MovieDetail = () => {
     }
   };
 
-  const openInviteDialog = () => {
-    if (!user) {
-      toast({ variant: "destructive", title: "Giriş yapmalısınız" });
-      return;
-    }
-    setShowInviteDialog(true);
-  };
-
-  const handlePartyCreated = (partyId: string) => {
-    setActiveParty(partyId);
-  };
-
-  // Determine video source - must be before early returns (hooks rule)
   const videoSrc = useMemo(() =>
     isMovie
       ? content?.video_url
@@ -364,13 +309,8 @@ const MovieDetail = () => {
                 poster={content.backdrop_url || content.poster_url}
                 initialProgress={watchProgress}
                 onProgressUpdate={(current, duration) => {
-                  setCurrentVideoTime(current);
                   saveWatchProgress(current, duration);
                 }}
-                onPlay={handleVideoPlay}
-                onPause={handleVideoPause}
-                onSeek={handleVideoSeek}
-                onPlayingChange={setIsVideoPlaying}
               />
             </div>
           ) : (
@@ -391,13 +331,8 @@ const MovieDetail = () => {
               poster={content.backdrop_url || content.poster_url}
               initialProgress={watchProgress}
               onProgressUpdate={(current, duration) => {
-                setCurrentVideoTime(current);
                 saveWatchProgress(current, duration);
               }}
-              onPlay={handleVideoPlay}
-              onPause={handleVideoPause}
-              onSeek={handleVideoSeek}
-              onPlayingChange={setIsVideoPlaying}
             />
           </div>
         ) : (
@@ -423,25 +358,14 @@ const MovieDetail = () => {
                 <h1 className="text-4xl md:text-5xl font-bold gold-glow">
                   {content.title}
                 </h1>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={openInviteDialog}
-                    variant="outline"
-                    size="icon"
-                    className="border-primary hover:bg-primary/20"
-                    title="Arkadaşlarınızla izleyin"
-                  >
-                    <Users className="w-6 h-6 text-primary" />
-                  </Button>
-                  <Button
-                    onClick={toggleFavorite}
-                    variant="outline"
-                    size="icon"
-                    className="border-gold hover:bg-gold/20"
-                  >
-                    <Heart className={`w-6 h-6 ${isFavorite ? "fill-gold text-gold" : "text-gold"}`} />
-                  </Button>
-                </div>
+                <Button
+                  onClick={toggleFavorite}
+                  variant="outline"
+                  size="icon"
+                  className="border-gold hover:bg-gold/20"
+                >
+                  <Heart className={`w-6 h-6 ${isFavorite ? "fill-gold text-gold" : "text-gold"}`} />
+                </Button>
               </div>
               
               <div className="flex flex-wrap items-center gap-4 mb-6">
@@ -479,7 +403,6 @@ const MovieDetail = () => {
                 </div>
               )}
 
-              {/* Episodes List for Series */}
               {!isMovie && episodes.length > 0 && (
                 <div className="mt-8">
                   <h2 className="text-2xl font-bold mb-4">Bölümler</h2>
@@ -561,34 +484,6 @@ const MovieDetail = () => {
               ))}
             </div>
           </div>
-        )}
-
-        <InviteFriendsDialog
-          open={showInviteDialog}
-          onOpenChange={setShowInviteDialog}
-          onPartyCreated={handlePartyCreated}
-          movieId={isMovie ? id : undefined}
-          seriesId={!isMovie ? id : undefined}
-          episodeId={selectedEpisode?.id}
-          currentVideoTime={currentVideoTime}
-        />
-
-        {activeParty && (
-          <WatchParty
-            partyId={activeParty}
-            onClose={() => setActiveParty(null)}
-            onSeek={(time) => {
-              videoPlayerRef.current?.seek(time);
-            }}
-            onPlay={() => {
-              videoPlayerRef.current?.play();
-            }}
-            onPause={() => {
-              videoPlayerRef.current?.pause();
-            }}
-            currentTime={currentVideoTime}
-            isPlaying={isVideoPlaying}
-          />
         )}
       </div>
     </div>
