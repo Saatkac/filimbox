@@ -10,7 +10,6 @@ import Search from "./pages/Search";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import Favorites from "./pages/Favorites";
-import Friends from "./pages/Friends";
 import AccountSettings from "./pages/AccountSettings";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -32,7 +31,6 @@ const App = () => (
           <Route path="/search" element={<Search />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/favorites" element={<Favorites />} />
-          <Route path="/friends" element={<Friends />} />
           <Route path="/account-settings" element={<AccountSettings />} />
           <Route
             path="/admin"
