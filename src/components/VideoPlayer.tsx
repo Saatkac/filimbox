@@ -15,6 +15,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+// Detect if device is mobile/tablet (for proxy routing)
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent.toLowerCase();
+  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(ua);
+};
+
+// Get proxy URL for mobile devices
+const getProxyUrl = (videoUrl: string): string => {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) return videoUrl;
+  return `${supabaseUrl}/functions/v1/hls-proxy?url=${encodeURIComponent(videoUrl)}`;
+};
 
 // Cookie helpers
 const getCookie = (name: string): string | null => {
@@ -193,8 +208,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     if (!videoRef.current || !src) return;
 
     const videoElement = videoRef.current;
-    const cleanSrc = normalizeUrl(src);
-    console.log('[VideoPlayer] Initializing with:', cleanSrc);
+    const normalizedSrc = normalizeUrl(src);
+    
+    // Mobile cihazlarda proxy kullan (Chrome eklentisi çalışmadığı için)
+    const isMobile = isMobileDevice();
+    const cleanSrc = isMobile ? getProxyUrl(normalizedSrc) : normalizedSrc;
+    
+    console.log('[VideoPlayer] Initializing with:', cleanSrc, '(mobile:', isMobile, ')');
     setError(null);
     setIsReady(false);
 
