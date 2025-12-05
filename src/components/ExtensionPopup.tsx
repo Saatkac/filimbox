@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, Chrome, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Download, Chrome, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import JSZip from 'jszip';
 
 // Chrome extension API type declaration
 declare global {
@@ -16,9 +17,21 @@ declare global {
 
 const POPUP_SHOWN_KEY = 'extension_popup_shown';
 
+const EXTENSION_FILES = [
+  'manifest.json',
+  'rules.json',
+  'background.js',
+  'popup.html',
+  'popup.js',
+  'icon16.png',
+  'icon48.png',
+  'icon128.png'
+];
+
 export const ExtensionPopup = () => {
   const [open, setOpen] = useState(false);
   const [hasExtension, setHasExtension] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     // Sadece bilgisayardan girişte göster
@@ -57,9 +70,38 @@ export const ExtensionPopup = () => {
     }
   };
 
-  const handleDownload = () => {
-    // Extension dosyalarını yeni sekmede aç
-    window.open('/extension/', '_blank');
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    
+    try {
+      const zip = new JSZip();
+      
+      // Tüm dosyaları fetch et ve zip'e ekle
+      const fetchPromises = EXTENSION_FILES.map(async (filename) => {
+        const response = await fetch(`/extension/${filename}`);
+        if (response.ok) {
+          const blob = await response.blob();
+          zip.file(filename, blob);
+        }
+      });
+      
+      await Promise.all(fetchPromises);
+      
+      // ZIP dosyasını oluştur ve indir
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'video-player-helper.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Eklenti indirme hatası:', error);
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const handleClose = () => {
@@ -104,19 +146,33 @@ export const ExtensionPopup = () => {
               <div className="space-y-3">
                 <h4 className="font-medium text-foreground">Kurulum Adımları:</h4>
                 <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
-                  <li>Aşağıdaki butona tıklayarak eklenti klasörünü açın</li>
-                  <li>Tüm dosyaları bilgisayarınıza indirin (sağ tık → Farklı kaydet)</li>
+                  <li>Aşağıdaki butona tıklayarak ZIP dosyasını indirin</li>
+                  <li>İndirilen ZIP dosyasını bir klasöre çıkartın</li>
                   <li>Chrome'da <code className="bg-muted px-1.5 py-0.5 rounded text-xs">chrome://extensions</code> adresine gidin</li>
                   <li>Sağ üstten "Geliştirici modu"nu açın</li>
                   <li>"Paketlenmemiş öğe yükle" butonuna tıklayın</li>
-                  <li>İndirdiğiniz klasörü seçin</li>
+                  <li>Çıkarttığınız klasörü seçin</li>
                   <li>Sayfayı yenileyin</li>
                 </ol>
               </div>
 
-              <Button onClick={handleDownload} className="w-full" size="lg">
-                <Download className="w-4 h-4 mr-2" />
-                Eklenti Dosyalarını Aç
+              <Button 
+                onClick={handleDownload} 
+                className="w-full" 
+                size="lg"
+                disabled={isDownloading}
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    İndiriliyor...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 mr-2" />
+                    Eklentiyi İndir (ZIP)
+                  </>
+                )}
               </Button>
             </>
           )}
