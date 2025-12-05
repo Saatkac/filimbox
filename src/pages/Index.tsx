@@ -89,45 +89,45 @@ const Index = () => {
       <Navbar />
       
       {featuredContent && (
-        <section className="relative h-[70vh] mt-16">
+        <section className="relative h-[50vh] sm:h-[60vh] md:h-[70vh] mt-14 sm:mt-16">
           <div className="absolute inset-0">
             <img
               src={featuredContent.backdrop_url || featuredContent.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=1920&h=1080&fit=crop"}
               alt={featuredContent.title}
               loading="eager"
-              fetchPriority="high"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-r from-cinema-dark via-cinema-dark/80 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-cinema-dark via-transparent to-transparent md:hidden" />
           </div>
           
-          <div className="relative container mx-auto px-4 h-full flex items-center">
+          <div className="relative container mx-auto px-4 h-full flex items-end pb-8 sm:items-center sm:pb-0">
             <div className="max-w-2xl">
-              <div className="flex items-center gap-2 text-gold mb-4">
-                <TrendingUp className="w-5 h-5" />
-                <span className="text-sm font-semibold uppercase">Öne Çıkan</span>
+              <div className="flex items-center gap-2 text-gold mb-2 sm:mb-4">
+                <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="text-xs sm:text-sm font-semibold uppercase">Öne Çıkan</span>
               </div>
-              <h1 className="text-5xl md:text-7xl font-bold mb-4 gold-glow">
+              <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold mb-2 sm:mb-4 gold-glow line-clamp-2">
                 {featuredContent.title}
               </h1>
-              <p className="text-lg text-muted-foreground mb-6 max-w-xl">
+              <p className="text-sm sm:text-lg text-muted-foreground mb-3 sm:mb-6 max-w-xl line-clamp-2 sm:line-clamp-3">
                 {featuredContent.description || "Harika bir içerik sizi bekliyor!"}
               </p>
-              <div className="flex items-center gap-4 mb-8">
-                <span className="px-3 py-1 bg-gold/20 text-gold rounded-full text-sm font-medium">
+              <div className="flex items-center gap-2 sm:gap-4 mb-4 sm:mb-8 flex-wrap">
+                <span className="px-2 sm:px-3 py-1 bg-gold/20 text-gold rounded-full text-xs sm:text-sm font-medium">
                   IMDb {featuredContent.rating}
                 </span>
-                <span className="text-muted-foreground">{featuredContent.year}</span>
+                <span className="text-muted-foreground text-xs sm:text-base">{featuredContent.year}</span>
                 {featuredContent.duration && (
-                  <span className="text-muted-foreground">{featuredContent.duration}</span>
+                  <span className="text-muted-foreground text-xs sm:text-base">{featuredContent.duration}</span>
                 )}
               </div>
               <Button 
-                size="lg" 
-                className="bg-gold hover:bg-gold-light text-black font-semibold"
+                size="default"
+                className="bg-gold hover:bg-gold-light text-black font-semibold w-full sm:w-auto touch-manipulation active:scale-95 transition-transform"
                 onClick={() => window.location.href = `/movie/${featuredContent.id}`}
               >
-                <Play className="w-5 h-5 mr-2" />
+                <Play className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 Şimdi İzle
               </Button>
             </div>
@@ -136,11 +136,11 @@ const Index = () => {
       )}
 
 
-      <section className="container mx-auto px-4 pb-16">
-        <h2 className="text-2xl font-bold mb-6">Tüm Filmler</h2>
+      <section className="container mx-auto px-3 sm:px-4 pb-16 pt-4 sm:pt-0">
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Tüm Filmler</h2>
         {filteredContent.length > 0 ? (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">
               {filteredContent.map((item) => (
                 <MovieCard
                   key={item.id}

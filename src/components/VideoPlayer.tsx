@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo, forwardRef, us
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack } from "lucide-react";
+import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack, Loader2 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,6 +74,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const [showControls, setShowControls] = useState(true);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isReady, setIsReady] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
@@ -85,6 +86,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     position: 0 
   });
   const isExternalControlRef = useRef(false);
+  const retryCountRef = useRef(0);
+  const maxRetries = 3;
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
@@ -200,16 +203,30 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         debug: false,
         enableWorker: true,
         lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000,
-        maxBufferHole: 0.5,
-        highBufferWatchdogPeriod: 2,
-        nudgeMaxRetry: 5,
+        // Optimized buffer settings for smoother playback
+        backBufferLength: 60,
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        maxBufferSize: 120 * 1000 * 1000,
+        maxBufferHole: 0.3,
+        highBufferWatchdogPeriod: 3,
+        nudgeMaxRetry: 10,
+        // Better fragment loading
+        fragLoadingTimeOut: 30000,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 1000,
+        manifestLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 4,
+        levelLoadingTimeOut: 20000,
+        levelLoadingMaxRetry: 4,
+        // Optimize for mobile
+        startLevel: -1,
+        abrEwmaDefaultEstimate: 500000,
+        abrBandWidthFactor: 0.95,
+        abrBandWidthUpFactor: 0.7,
         xhrSetup: (xhr) => {
           xhr.withCredentials = false;
-          xhr.timeout = 20000;
+          xhr.timeout = 30000;
         }
       });
 
@@ -220,11 +237,16 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         console.log('[VideoPlayer] Ready');
         setIsReady(true);
+        retryCountRef.current = 0;
         if (initialProgress > 0) {
           setTimeout(() => {
             videoElement.currentTime = initialProgress;
           }, 100);
         }
+      });
+
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        setIsBuffering(false);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -233,14 +255,22 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              setTimeout(() => hls.startLoad(), 1000);
+              if (retryCountRef.current < maxRetries) {
+                retryCountRef.current++;
+                console.log(`[VideoPlayer] Network error, retry ${retryCountRef.current}/${maxRetries}`);
+                setTimeout(() => hls.startLoad(), 2000);
+              } else {
+                setError('Bağlantı hatası. Lütfen sayfayı yenileyin.');
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('[VideoPlayer] Recovering from media error');
               hls.recoverMediaError();
               break;
             default:
               hls.destroy();
               setIsReady(false);
+              setError('Video yüklenemedi. Lütfen tekrar deneyin.');
               break;
           }
         }
@@ -271,6 +301,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
     const handlePlay = () => {
       setIsPlaying(true);
+      setIsBuffering(false);
       if (!isExternalControlRef.current && videoRef.current) {
         onPlay?.(videoRef.current.currentTime);
       }
@@ -282,16 +313,40 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       }
     };
 
+    const handleWaiting = () => {
+      setIsBuffering(true);
+    };
+
+    const handleCanPlay = () => {
+      setIsBuffering(false);
+    };
+
+    const handleStalled = () => {
+      setIsBuffering(true);
+      // Try to recover from stalled state
+      if (hlsRef.current) {
+        setTimeout(() => {
+          hlsRef.current?.startLoad();
+        }, 1000);
+      }
+    };
+
     videoElement.addEventListener('timeupdate', handleTimeUpdate);
     videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
     videoElement.addEventListener('play', handlePlay);
     videoElement.addEventListener('pause', handlePause);
+    videoElement.addEventListener('waiting', handleWaiting);
+    videoElement.addEventListener('canplay', handleCanPlay);
+    videoElement.addEventListener('stalled', handleStalled);
 
     return () => {
       videoElement.removeEventListener('timeupdate', handleTimeUpdate);
       videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
       videoElement.removeEventListener('play', handlePlay);
       videoElement.removeEventListener('pause', handlePause);
+      videoElement.removeEventListener('waiting', handleWaiting);
+      videoElement.removeEventListener('canplay', handleCanPlay);
+      videoElement.removeEventListener('stalled', handleStalled);
       
       if (hlsRef.current) {
         hlsRef.current.destroy();
@@ -500,29 +555,44 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
           {/* Loading Indicator */}
           {!isReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-              <div className="text-gold text-lg">Video hazırlanıyor...</div>
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-10 h-10 text-gold animate-spin" />
+                <div className="text-gold text-lg">Video hazırlanıyor...</div>
+              </div>
+            </div>
+          )}
+
+          {/* Buffering Indicator */}
+          {isBuffering && isReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="w-12 h-12 text-gold animate-spin" />
+                <div className="text-gold text-sm">Yükleniyor...</div>
+              </div>
             </div>
           )}
 
           {/* Custom Controls */}
           <div
             className={`absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent transition-opacity duration-300 ${
-              showControls ? 'opacity-100' : 'opacity-0'
+              showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
             }`}
           >
             {/* Center Play/Pause Button */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <button
-                onClick={togglePlay}
-                className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-gold/90 hover:bg-gold flex items-center justify-center transition-all hover:scale-110"
-              >
-                {isPlaying ? (
-                  <Pause className="w-8 h-8 md:w-10 md:h-10 text-black" />
-                ) : (
-                  <Play className="w-8 h-8 md:w-10 md:h-10 text-black ml-1" />
-                )}
-              </button>
+              {!isBuffering && (
+                <button
+                  onClick={togglePlay}
+                  className="w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 rounded-full bg-gold/90 hover:bg-gold active:scale-95 flex items-center justify-center transition-all hover:scale-110 touch-manipulation"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 text-black" />
+                  ) : (
+                    <Play className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 text-black ml-1" />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Bottom Controls */}
