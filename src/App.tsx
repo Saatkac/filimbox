@@ -14,6 +14,7 @@ import Friends from "./pages/Friends";
 import AccountSettings from "./pages/AccountSettings";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
+import { ExtensionPopup } from "./components/ExtensionPopup";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <ExtensionPopup />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
