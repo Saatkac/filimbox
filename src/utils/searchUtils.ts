@@ -56,35 +56,42 @@ export const detectLanguage = (text: string): 'tr' | 'en' => {
   return 'en';
 };
 
-// Gelişmiş eşleştirme kontrolü
+// Gelişmiş eşleştirme kontrolü - daha sıkı filtreleme
 export const advancedMatch = (text: string, query: string): boolean => {
   if (!text || !query) return false;
   
-  const normalizedText = normalizeTurkish(text);
-  const normalizedQuery = normalizeTurkish(query);
+  // Minimum 2 karakter gerekli
+  if (query.trim().length < 2) return false;
   
-  // Direkt eşleşme
+  const normalizedText = normalizeTurkish(text);
+  const normalizedQuery = normalizeTurkish(query.trim());
+  
+  // Çok kısa sorgular için sadece kelime başı eşleşmesi
+  if (normalizedQuery.length < 3) {
+    const textWords = normalizedText.split(/\s+/);
+    return textWords.some(word => word.startsWith(normalizedQuery));
+  }
+  
+  // Direkt eşleşme (sorgu metin içinde geçiyor mu)
   if (normalizedText.includes(normalizedQuery)) return true;
   
   // Boşluksuz eşleşme (alaca karanlık = alacakaranlık)
   const textNoSpaces = removeSpacesAndSpecialChars(normalizedText);
   const queryNoSpaces = removeSpacesAndSpecialChars(normalizedQuery);
-  if (textNoSpaces.includes(queryNoSpaces)) return true;
+  if (queryNoSpaces.length >= 3 && textNoSpaces.includes(queryNoSpaces)) return true;
   
-  // Kelime bazlı eşleşme (tüm kelimeler içerik içinde var mı?)
-  const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length > 1);
+  // Kelime bazlı eşleşme - TÜM kelimeler metinde olmalı
+  const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length >= 2);
   if (queryWords.length > 1) {
     const allWordsMatch = queryWords.every(word => normalizedText.includes(word));
     if (allWordsMatch) return true;
   }
   
-  // Kısmi kelime eşleşmesi (en az bir kelime tam eşleşsin)
-  if (queryWords.length >= 1) {
+  // Tek kelime sorgular için: kelime başında eşleşme
+  if (queryWords.length === 1 && queryWords[0].length >= 3) {
     const textWords = normalizedText.split(/\s+/);
-    const hasWordMatch = queryWords.some(qWord => 
-      textWords.some(tWord => tWord.includes(qWord) || qWord.includes(tWord))
-    );
-    if (hasWordMatch && queryWords.length === 1) return true;
+    const hasWordStartMatch = textWords.some(tWord => tWord.startsWith(queryWords[0]));
+    if (hasWordStartMatch) return true;
   }
   
   return false;
