@@ -11,6 +11,7 @@ export const normalizeTurkish = (text: string): string => {
     .replace(/ö/g, 'o')
     .replace(/ç/g, 'c')
     .replace(/İ/g, 'i')
+    .replace(/I/g, 'i')  // İngilizce büyük I'yı da i yap
     .replace(/Ğ/g, 'g')
     .replace(/Ü/g, 'u')
     .replace(/Ş/g, 's')
