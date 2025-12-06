@@ -4,7 +4,6 @@ import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
 import { Search as SearchIcon, Loader2 } from "lucide-react";
-import { advancedMatch, normalizeTurkish } from "@/utils/searchUtils";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
@@ -25,51 +24,57 @@ const Search = () => {
     
     setLoading(true);
     
-    // Tüm filmler ve dizileri çek
+    // Sorguyu hazırla - Türkçe karakterleri ve varyantları için
+    const searchTerm = `%${query.trim()}%`;
+    
+    // Supabase'de ILIKE ile arama yap (sunucu tarafında)
     const [moviesData, seriesData] = await Promise.all([
-      supabase.from("movies").select("*"),
-      supabase.from("series").select("*"),
+      supabase
+        .from("movies")
+        .select("*")
+        .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
+        .limit(200),
+      supabase
+        .from("series")
+        .select("*")
+        .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
+        .limit(50),
     ]);
     
     const allMovies = moviesData.data || [];
     const allSeries = seriesData.data || [];
+    
+    // İki sonucu birleştir
     const allContent = [...allMovies, ...allSeries];
     
-    // Arama
-    let filteredResults = allContent.filter(item => {
-      return advancedMatch(item.title, query) ||
-             advancedMatch(item.description || '', query) ||
-             advancedMatch(item.category || '', query);
-    });
-    
-    // Sonuçları sırala - tam eşleşmeler önce
-    filteredResults.sort((a, b) => {
-      const normalizedQuery = normalizeTurkish(query);
-      const aTitle = normalizeTurkish(a.title);
-      const bTitle = normalizeTurkish(b.title);
+    // Sonuçları sırala - başlık eşleşmeleri önce
+    const queryLower = query.toLowerCase();
+    allContent.sort((a, b) => {
+      const aTitle = a.title?.toLowerCase() || '';
+      const bTitle = b.title?.toLowerCase() || '';
       
       // Tam başlık eşleşmesi
-      const aExact = aTitle === normalizedQuery;
-      const bExact = bTitle === normalizedQuery;
+      const aExact = aTitle === queryLower;
+      const bExact = bTitle === queryLower;
       if (aExact && !bExact) return -1;
       if (!aExact && bExact) return 1;
       
-      // Başlık içinde geçme
-      const aContains = aTitle.includes(normalizedQuery);
-      const bContains = bTitle.includes(normalizedQuery);
-      if (aContains && !bContains) return -1;
-      if (!aContains && bContains) return 1;
-      
-      // Başlığın başında geçme
-      const aStarts = aTitle.startsWith(normalizedQuery);
-      const bStarts = bTitle.startsWith(normalizedQuery);
+      // Başlık ile başlama
+      const aStarts = aTitle.startsWith(queryLower);
+      const bStarts = bTitle.startsWith(queryLower);
       if (aStarts && !bStarts) return -1;
       if (!aStarts && bStarts) return 1;
+      
+      // Başlık içinde geçme
+      const aContains = aTitle.includes(queryLower);
+      const bContains = bTitle.includes(queryLower);
+      if (aContains && !bContains) return -1;
+      if (!aContains && bContains) return 1;
       
       return 0;
     });
     
-    setResults(filteredResults);
+    setResults(allContent);
     setLoading(false);
   };
 
