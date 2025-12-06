@@ -3,16 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
-import { Search as SearchIcon, Globe, Loader2 } from "lucide-react";
-import { advancedMatch, detectLanguage, translateText, normalizeTurkish } from "@/utils/searchUtils";
+import { Search as SearchIcon, Loader2 } from "lucide-react";
+import { advancedMatch, normalizeTurkish } from "@/utils/searchUtils";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [translatedQuery, setTranslatedQuery] = useState<string | null>(null);
-  const [isTranslating, setIsTranslating] = useState(false);
   
   useEffect(() => {
     searchContent();
@@ -26,7 +24,6 @@ const Search = () => {
     }
     
     setLoading(true);
-    setTranslatedQuery(null);
     
     // Tüm filmler ve dizileri çek
     const [moviesData, seriesData] = await Promise.all([
@@ -38,44 +35,12 @@ const Search = () => {
     const allSeries = seriesData.data || [];
     const allContent = [...allMovies, ...allSeries];
     
-    // İlk arama - orijinal sorgu ile
+    // Arama
     let filteredResults = allContent.filter(item => {
       return advancedMatch(item.title, query) ||
              advancedMatch(item.description || '', query) ||
              advancedMatch(item.category || '', query);
     });
-    
-    // Sonuç yoksa veya az ise çeviri yap
-    if (filteredResults.length < 3 && query.length >= 2) {
-      setIsTranslating(true);
-      
-      // Dil algıla ve çevir
-      const detectedLang = detectLanguage(query);
-      const targetLang = detectedLang === 'tr' ? 'en' : 'tr';
-      
-      const translated = await translateText(query, detectedLang, targetLang);
-      
-      if (translated && translated.toLowerCase() !== query.toLowerCase()) {
-        setTranslatedQuery(translated);
-        
-        // Çevrilmiş sorgu ile de ara
-        const translatedResults = allContent.filter(item => {
-          return advancedMatch(item.title, translated) ||
-                 advancedMatch(item.description || '', translated) ||
-                 advancedMatch(item.category || '', translated);
-        });
-        
-        // Sonuçları birleştir (tekrarları kaldır)
-        const existingIds = new Set(filteredResults.map(r => r.id));
-        translatedResults.forEach(item => {
-          if (!existingIds.has(item.id)) {
-            filteredResults.push(item);
-          }
-        });
-      }
-      
-      setIsTranslating(false);
-    }
     
     // Sonuçları sırala - tam eşleşmeler önce
     filteredResults.sort((a, b) => {
@@ -137,24 +102,6 @@ const Search = () => {
           <p className="text-muted-foreground">
             "<span className="text-gold">{query}</span>" için {results.length} sonuç bulundu
           </p>
-          
-          {/* Çeviri gösterimi */}
-          {isTranslating && (
-            <div className="mt-3 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Çeviri yapılıyor...</span>
-            </div>
-          )}
-          
-          {translatedQuery && !isTranslating && (
-            <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <Globe className="w-4 h-4 text-primary" />
-              <span className="text-sm text-muted-foreground">Ayrıca arandı:</span>
-              <span className="text-sm px-2 py-1 bg-primary/10 text-primary rounded-md">
-                {translatedQuery}
-              </span>
-            </div>
-          )}
         </div>
 
         {results.length > 0 ? (
@@ -178,7 +125,7 @@ const Search = () => {
               Aramanıza uygun içerik bulunamadı.
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              Farklı anahtar kelimeler veya İngilizce/Türkçe karşılığını deneyin.
+              Farklı anahtar kelimeler deneyin.
             </p>
           </div>
         )}
