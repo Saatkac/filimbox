@@ -8,13 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2, MessageSquare } from "lucide-react";
+import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2, MessageSquare, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { categories } from "@/data/categories";
 import { z } from "zod";
 import { parseM3U } from "@/utils/m3uParser";
 import MovieCard from "@/components/MovieCard";
 import AdminChat from "@/components/AdminChat";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const movieSchema = z.object({
   title: z.string().trim().min(1, "Başlık gereklidir").max(200),
@@ -50,6 +52,13 @@ const episodeSchema = z.object({
   thumbnail_url: z.string().url("Geçerli bir URL girin").or(z.literal("")).transform(val => val || undefined),
 });
 
+interface DuplicateSeriesInfo {
+  movieTitle: string;
+  movieUrl: string;
+  seriesTitle: string;
+  episodeTitle: string;
+}
+
 const Admin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -64,7 +73,9 @@ const Admin = () => {
   const [sandboxLoading, setSandboxLoading] = useState(false);
   const [sandboxSearch, setSandboxSearch] = useState("");
   const [sandboxDisplayCount, setSandboxDisplayCount] = useState(24);
-
+  const [duplicateSeries, setDuplicateSeries] = useState<DuplicateSeriesInfo[]>([]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [pendingMovies, setPendingMovies] = useState<any[]>([]);
   useEffect(() => {
     loadMovies();
     loadSeries();
@@ -249,41 +260,119 @@ const Admin = () => {
         return;
       }
 
-      // Insert movies in batches
-      const batchSize = 100;
-      let imported = 0;
+      // Episodes tablosundan tüm video_url'leri çek
+      const { data: allEpisodes } = await supabase
+        .from("episodes")
+        .select("video_url, title, series_id");
       
-      for (let i = 0; i < parsedMovies.length; i += batchSize) {
-        const batch = parsedMovies.slice(i, i + batchSize).map(movie => ({
-          ...movie,
-          source: 'm3u',
-          imported_at: new Date().toISOString(),
-          description: null,
-          backdrop_url: null,
-          trailer_url: null,
-        }));
-
-        const { error } = await supabase.from("movies").insert(batch);
-        
-        if (error) {
-          console.error("Batch import error:", error);
+      const { data: allSeries } = await supabase
+        .from("series")
+        .select("id, title");
+      
+      const seriesMap = new Map(allSeries?.map(s => [s.id, s.title]) || []);
+      const episodeUrls = new Set(allEpisodes?.map(e => e.video_url) || []);
+      
+      // Aynı URL'ye sahip filmleri bul
+      const duplicates: DuplicateSeriesInfo[] = [];
+      const uniqueMovies: any[] = [];
+      
+      for (const movie of parsedMovies) {
+        if (episodeUrls.has(movie.video_url)) {
+          const matchingEpisode = allEpisodes?.find(e => e.video_url === movie.video_url);
+          if (matchingEpisode) {
+            duplicates.push({
+              movieTitle: movie.title,
+              movieUrl: movie.video_url,
+              seriesTitle: seriesMap.get(matchingEpisode.series_id) || 'Bilinmeyen Dizi',
+              episodeTitle: matchingEpisode.title
+            });
+          }
         } else {
-          imported += batch.length;
+          uniqueMovies.push(movie);
         }
       }
-
-      toast({ 
-        title: "Başarılı", 
-        description: `${imported} film başarıyla içe aktarıldı` 
-      });
       
-      setM3uFile(null);
-      loadMovies();
+      // Eğer duplicate varsa dialog göster
+      if (duplicates.length > 0) {
+        setDuplicateSeries(duplicates);
+        setPendingMovies(uniqueMovies);
+        setShowDuplicateDialog(true);
+        setImportLoading(false);
+        return;
+      }
+      
+      // Duplicate yoksa direkt import et
+      await importMoviesToDatabase(uniqueMovies);
+      
     } catch (error) {
       console.error("M3U import error:", error);
       toast({ variant: "destructive", title: "Hata", description: "M3U dosyası işlenirken hata oluştu" });
     }
     
+    setImportLoading(false);
+  };
+
+  const importMoviesToDatabase = async (moviesToImport: any[]) => {
+    if (moviesToImport.length === 0) {
+      toast({ title: "Bilgi", description: "Import edilecek film bulunamadı" });
+      return;
+    }
+    
+    const batchSize = 100;
+    let imported = 0;
+    
+    for (let i = 0; i < moviesToImport.length; i += batchSize) {
+      const batch = moviesToImport.slice(i, i + batchSize).map(movie => ({
+        ...movie,
+        source: 'm3u',
+        imported_at: new Date().toISOString(),
+        description: null,
+        backdrop_url: null,
+        trailer_url: null,
+      }));
+
+      const { error } = await supabase.from("movies").insert(batch);
+      
+      if (error) {
+        console.error("Batch import error:", error);
+      } else {
+        imported += batch.length;
+      }
+    }
+
+    toast({ 
+      title: "Başarılı", 
+      description: `${imported} film başarıyla içe aktarıldı` 
+    });
+    
+    setM3uFile(null);
+    loadMovies();
+  };
+
+  const handleDuplicateDialogConfirm = async (skipDuplicates: boolean) => {
+    setShowDuplicateDialog(false);
+    setImportLoading(true);
+    
+    if (skipDuplicates) {
+      // Sadece unique filmleri import et
+      await importMoviesToDatabase(pendingMovies);
+    } else {
+      // Tüm filmleri (duplicate olanlar dahil) import et
+      const allMovies = [...pendingMovies, ...duplicateSeries.map(d => ({
+        title: d.movieTitle,
+        video_url: d.movieUrl,
+        // Diğer alanlar parseM3U'dan gelir, burada sadece temel bilgileri ekliyoruz
+        poster_url: '',
+        category: 'Genel',
+        year: null,
+        rating: 7.0,
+        duration: null,
+      }))];
+      await importMoviesToDatabase(allMovies);
+    }
+    
+    setDuplicateSeries([]);
+    setPendingMovies([]);
     setImportLoading(false);
   };
 
@@ -832,6 +921,68 @@ const Admin = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Duplicate Series Dialog */}
+      <Dialog open={showDuplicateDialog} onOpenChange={setShowDuplicateDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-yellow-500">
+              <AlertTriangle className="w-5 h-5" />
+              Aynı Linke Sahip Diziler Bulundu!
+            </DialogTitle>
+            <DialogDescription>
+              M3U dosyasındaki bazı filmler, sistemde kayıtlı dizilerle aynı video linkine sahip. 
+              Bu filmleri import etmek istiyor musunuz?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="max-h-[300px] pr-4">
+            <div className="space-y-3">
+              {duplicateSeries.map((dup, index) => (
+                <div key={index} className="p-3 bg-secondary rounded-lg border border-border">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-medium text-foreground">
+                      Film: <span className="text-gold">{dup.movieTitle}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Dizi: {dup.seriesTitle} - {dup.episodeTitle}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      URL: {dup.movieUrl.substring(0, 60)}...
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          
+          <div className="text-sm text-muted-foreground">
+            <p>Toplam: {duplicateSeries.length} çakışan film</p>
+            <p>Import edilecek benzersiz film: {pendingMovies.length}</p>
+          </div>
+          
+          <DialogFooter className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDuplicateDialog(false)}
+            >
+              İptal
+            </Button>
+            <Button 
+              variant="secondary"
+              onClick={() => handleDuplicateDialogConfirm(true)}
+            >
+              Çakışanları Atla ({pendingMovies.length} film)
+            </Button>
+            <Button 
+              className="bg-gold hover:bg-gold-light text-black"
+              onClick={() => handleDuplicateDialogConfirm(false)}
+            >
+              Tümünü Import Et
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
