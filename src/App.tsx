@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AdminSettingsProvider } from "@/hooks/useAdminSettings";
 import Index from "./pages/Index";
 import MovieDetail from "./pages/MovieDetail";
 import Categories from "./pages/Categories";
@@ -19,31 +20,33 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <ExtensionPopup />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/movie/:id" element={<MovieDetail />} />
-          <Route path="/categories" element={<Categories />} />
-          <Route path="/search" element={<Search />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/favorites" element={<Favorites />} />
-          <Route path="/account-settings" element={<AccountSettings />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute requireAdmin>
-                <Admin />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AdminSettingsProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <ExtensionPopup />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/movie/:id" element={<MovieDetail />} />
+            <Route path="/categories" element={<Categories />} />
+            <Route path="/search" element={<Search />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/favorites" element={<Favorites />} />
+            <Route path="/account-settings" element={<AccountSettings />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AdminSettingsProvider>
   </QueryClientProvider>
 );
 

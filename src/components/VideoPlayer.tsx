@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo, memo, forwardRef, us
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack, Loader2 } from "lucide-react";
+import { AlertCircle, Play, Pause, Volume2, VolumeX, Maximize, Minimize, SkipForward, SkipBack, Loader2, Settings } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,13 @@ const setCookie = (name: string, value: string, days = 365) => {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
 };
 
+interface QualityLevel {
+  height: number;
+  bitrate: number;
+  index: number;
+  label: string;
+}
+
 interface VideoPlayerProps {
   src: string;
   poster?: string;
@@ -43,6 +50,8 @@ interface VideoPlayerProps {
   onPause?: (time: number) => void;
   onSeek?: (time: number) => void;
   onPlayingChange?: (playing: boolean) => void;
+  showQualitySelector?: boolean;
+  showPlaybackSpeed?: boolean;
 }
 
 export interface VideoPlayerRef {
@@ -59,7 +68,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   onPlay,
   onPause,
   onSeek,
-  onPlayingChange
+  onPlayingChange,
+  showQualitySelector = true,
+  showPlaybackSpeed = true
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,6 +99,10 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const isExternalControlRef = useRef(false);
   const retryCountRef = useRef(0);
   const maxRetries = 3;
+  
+  // Quality levels state
+  const [qualityLevels, setQualityLevels] = useState<QualityLevel[]>([]);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1); // -1 = auto
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
@@ -234,10 +249,24 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       hls.loadSource(cleanSrc);
       hls.attachMedia(videoElement);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('[VideoPlayer] Ready');
+      hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+        console.log('[VideoPlayer] Ready, levels:', data.levels.length);
         setIsReady(true);
         retryCountRef.current = 0;
+        
+        // Extract quality levels
+        if (data.levels && data.levels.length > 0) {
+          const levels: QualityLevel[] = data.levels.map((level: any, index: number) => ({
+            height: level.height || 0,
+            bitrate: level.bitrate || 0,
+            index,
+            label: level.height ? `${level.height}p` : `${Math.round((level.bitrate || 0) / 1000)}kbps`
+          }));
+          // Sort by height descending
+          levels.sort((a, b) => b.height - a.height);
+          setQualityLevels(levels);
+        }
+        
         if (initialProgress > 0) {
           setTimeout(() => {
             videoElement.currentTime = initialProgress;
@@ -247,6 +276,10 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         setIsBuffering(false);
+      });
+      
+      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+        console.log('[VideoPlayer] Quality switched to level:', data.level);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -374,6 +407,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     if (videoRef.current) {
       videoRef.current.playbackRate = rate;
       setPlaybackRate(rate);
+    }
+  }, []);
+
+  const changeQuality = useCallback((levelIndex: number) => {
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = levelIndex;
+      setCurrentQuality(levelIndex);
+      console.log('[VideoPlayer] Quality changed to level:', levelIndex);
     }
   }, []);
 
@@ -692,31 +733,68 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
                 {/* Right Side Controls */}
                 <div className="flex items-center gap-2 md:gap-3">
-                  {/* Playback Speed */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="text-white hover:text-gold hover:bg-white/10 h-8 px-2 text-xs md:text-sm"
-                      >
-                        {playbackRate}x
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-black/95 border-gold/20">
-                      <DropdownMenuLabel className="text-gold">Oynatma Hızı</DropdownMenuLabel>
-                      <DropdownMenuSeparator className="bg-gold/20" />
-                      {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                  {/* Quality Selector */}
+                  {showQualitySelector && qualityLevels.length > 1 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-white hover:text-gold hover:bg-white/10 h-8 px-2 text-xs md:text-sm"
+                        >
+                          <Settings className="w-4 h-4 mr-1" />
+                          {currentQuality === -1 ? 'Otomatik' : qualityLevels.find(q => q.index === currentQuality)?.label || 'Kalite'}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-black/95 border-gold/20">
+                        <DropdownMenuLabel className="text-gold">Video Kalitesi</DropdownMenuLabel>
+                        <DropdownMenuSeparator className="bg-gold/20" />
                         <DropdownMenuItem
-                          key={rate}
-                          onClick={() => changePlaybackRate(rate)}
+                          onClick={() => changeQuality(-1)}
                           className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
                         >
-                          {rate === playbackRate && "✓ "}{rate}x
+                          {currentQuality === -1 && "✓ "}Otomatik
                         </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        {qualityLevels.map((level) => (
+                          <DropdownMenuItem
+                            key={level.index}
+                            onClick={() => changeQuality(level.index)}
+                            className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
+                          >
+                            {currentQuality === level.index && "✓ "}{level.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+
+                  {/* Playback Speed */}
+                  {showPlaybackSpeed && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="text-white hover:text-gold hover:bg-white/10 h-8 px-2 text-xs md:text-sm"
+                        >
+                          {playbackRate}x
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-black/95 border-gold/20">
+                        <DropdownMenuLabel className="text-gold">Oynatma Hızı</DropdownMenuLabel>
+                        <DropdownMenuSeparator className="bg-gold/20" />
+                        {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
+                          <DropdownMenuItem
+                            key={rate}
+                            onClick={() => changePlaybackRate(rate)}
+                            className="text-white hover:text-gold hover:bg-gold/10 cursor-pointer"
+                          >
+                            {rate === playbackRate && "✓ "}{rate}x
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
                   {/* Fullscreen Toggle */}
                   <button
