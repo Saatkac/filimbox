@@ -1,22 +1,47 @@
-import { supabase } from "@/integrations/supabase/client";
-
-// Türkçe karakterleri normalize et
+// Türkçe karakterleri normalize et - karakter kodlarıyla
 export const normalizeTurkish = (text: string): string => {
-  return text
-    .toLowerCase()
-    .replace(/ı/g, 'i')
-    .replace(/ğ/g, 'g')
-    .replace(/ü/g, 'u')
-    .replace(/ş/g, 's')
-    .replace(/ö/g, 'o')
-    .replace(/ç/g, 'c')
-    .replace(/İ/g, 'i')
-    .replace(/I/g, 'i')  // İngilizce büyük I'yı da i yap
-    .replace(/Ğ/g, 'g')
-    .replace(/Ü/g, 'u')
-    .replace(/Ş/g, 's')
-    .replace(/Ö/g, 'o')
-    .replace(/Ç/g, 'c');
+  if (!text) return '';
+  
+  let result = '';
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const code = text.charCodeAt(i);
+    
+    // Debug log (silinebilir)
+    // console.log(`Char: ${char}, Code: ${code} (0x${code.toString(16)})`);
+    
+    // Türkçe ve İngilizce i/I varyantları
+    // ı = 305 (0x131), İ = 304 (0x130), I = 73 (0x49), i = 105 (0x69)
+    if (code === 305 || code === 304 || code === 73 || code === 105) {
+      result += 'i';
+    }
+    // ğ = 287 (0x11F), Ğ = 286 (0x11E)
+    else if (code === 287 || code === 286) {
+      result += 'g';
+    }
+    // ü = 252 (0xFC), Ü = 220 (0xDC)
+    else if (code === 252 || code === 220) {
+      result += 'u';
+    }
+    // ş = 351 (0x15F), Ş = 350 (0x15E)
+    else if (code === 351 || code === 350) {
+      result += 's';
+    }
+    // ö = 246 (0xF6), Ö = 214 (0xD6)
+    else if (code === 246 || code === 214) {
+      result += 'o';
+    }
+    // ç = 231 (0xE7), Ç = 199 (0xC7)
+    else if (code === 231 || code === 199) {
+      result += 'c';
+    }
+    else {
+      result += char.toLowerCase();
+    }
+  }
+  
+  return result;
 };
 
 // Boşlukları ve özel karakterleri kaldır
@@ -24,78 +49,42 @@ export const removeSpacesAndSpecialChars = (text: string): string => {
   return text.replace(/[\s\-_:.,'!?()]/g, '');
 };
 
-// API ile çeviri yap
-export const translateText = async (text: string, from: string, to: string): Promise<string | null> => {
-  try {
-    const response = await fetch(
-      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`
-    );
-    const data = await response.json();
-    
-    if (data.responseStatus === 200 && data.responseData?.translatedText) {
-      const translated = data.responseData.translatedText;
-      // API bazen aynı metni döndürür, bunu kontrol et
-      if (translated.toLowerCase() !== text.toLowerCase()) {
-        return translated;
-      }
-    }
-    return null;
-  } catch (error) {
-    console.error('Translation error:', error);
-    return null;
-  }
-};
-
-// Dil tespiti (basit)
-export const detectLanguage = (text: string): 'tr' | 'en' => {
-  const turkishChars = /[çğıöşüÇĞİÖŞÜ]/;
-  const turkishWords = ['ve', 'bir', 'bu', 'için', 'ile', 'olan', 'film', 'kara', 'son', 'gece'];
-  
-  if (turkishChars.test(text)) return 'tr';
-  
-  const words = text.toLowerCase().split(/\s+/);
-  const hasTurkishWord = words.some(word => turkishWords.includes(word));
-  if (hasTurkishWord) return 'tr';
-  
-  return 'en';
-};
-
-// Gelişmiş eşleştirme kontrolü - daha sıkı filtreleme
+// Basit arama eşleştirmesi
 export const advancedMatch = (text: string, query: string): boolean => {
   if (!text || !query) return false;
   
+  const trimmedQuery = query.trim();
+  
   // Minimum 2 karakter gerekli
-  if (query.trim().length < 2) return false;
+  if (trimmedQuery.length < 2) return false;
   
   const normalizedText = normalizeTurkish(text);
-  const normalizedQuery = normalizeTurkish(query.trim());
+  const normalizedQuery = normalizeTurkish(trimmedQuery);
   
-  // Çok kısa sorgular için sadece kelime başı eşleşmesi
-  if (normalizedQuery.length < 3) {
-    const textWords = normalizedText.split(/\s+/);
-    return textWords.some(word => word.startsWith(normalizedQuery));
+  // 1. Direkt içerik eşleşmesi
+  if (normalizedText.includes(normalizedQuery)) {
+    return true;
   }
   
-  // Direkt eşleşme (sorgu metin içinde geçiyor mu)
-  if (normalizedText.includes(normalizedQuery)) return true;
-  
-  // Boşluksuz eşleşme (alaca karanlık = alacakaranlık)
+  // 2. Boşluksuz eşleşme (alaca karanlık = alacakaranlık)
   const textNoSpaces = removeSpacesAndSpecialChars(normalizedText);
   const queryNoSpaces = removeSpacesAndSpecialChars(normalizedQuery);
-  if (queryNoSpaces.length >= 3 && textNoSpaces.includes(queryNoSpaces)) return true;
+  if (queryNoSpaces.length >= 2 && textNoSpaces.includes(queryNoSpaces)) {
+    return true;
+  }
   
-  // Kelime bazlı eşleşme - TÜM kelimeler metinde olmalı
+  // 3. Çoklu kelime araması - TÜM kelimeler metinde olmalı
   const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length >= 2);
   if (queryWords.length > 1) {
     const allWordsMatch = queryWords.every(word => normalizedText.includes(word));
     if (allWordsMatch) return true;
   }
   
-  // Tek kelime sorgular için: kelime başında eşleşme
-  if (queryWords.length === 1 && queryWords[0].length >= 3) {
-    const textWords = normalizedText.split(/\s+/);
-    const hasWordStartMatch = textWords.some(tWord => tWord.startsWith(queryWords[0]));
-    if (hasWordStartMatch) return true;
+  // 4. Tek kelime için kısmi eşleşme
+  if (queryWords.length === 1 && queryWords[0].length >= 2) {
+    if (normalizedText.includes(queryWords[0])) {
+      return true;
+    }
   }
   
   return false;
