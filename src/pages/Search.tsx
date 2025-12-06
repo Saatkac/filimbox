@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
@@ -10,73 +10,99 @@ const Search = () => {
   const query = searchParams.get("q") || "";
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const lastQueryRef = useRef<string>("");
+  const abortControllerRef = useRef<AbortController | null>(null);
   
   useEffect(() => {
-    searchContent();
-  }, [query]);
-
-  const searchContent = async () => {
-    if (!query.trim()) {
-      setResults([]);
+    // Aynı sorgu için tekrar arama yapma
+    if (lastQueryRef.current === query && results.length > 0) {
       setLoading(false);
       return;
     }
     
-    setLoading(true);
+    // Önceki isteği iptal et
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     
-    // Sorguyu hazırla - Türkçe karakterleri ve varyantları için
-    const searchTerm = `%${query.trim()}%`;
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     
-    // Supabase'de ILIKE ile arama yap (sunucu tarafında)
-    const [moviesData, seriesData] = await Promise.all([
-      supabase
-        .from("movies")
-        .select("*")
-        .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
-        .limit(200),
-      supabase
-        .from("series")
-        .select("*")
-        .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
-        .limit(50),
-    ]);
-    
-    const allMovies = moviesData.data || [];
-    const allSeries = seriesData.data || [];
-    
-    // İki sonucu birleştir
-    const allContent = [...allMovies, ...allSeries];
-    
-    // Sonuçları sırala - başlık eşleşmeleri önce
-    const queryLower = query.toLowerCase();
-    allContent.sort((a, b) => {
-      const aTitle = a.title?.toLowerCase() || '';
-      const bTitle = b.title?.toLowerCase() || '';
+    const searchContent = async () => {
+      if (!query.trim()) {
+        setResults([]);
+        setLoading(false);
+        return;
+      }
       
-      // Tam başlık eşleşmesi
-      const aExact = aTitle === queryLower;
-      const bExact = bTitle === queryLower;
-      if (aExact && !bExact) return -1;
-      if (!aExact && bExact) return 1;
+      setLoading(true);
+      lastQueryRef.current = query;
       
-      // Başlık ile başlama
-      const aStarts = aTitle.startsWith(queryLower);
-      const bStarts = bTitle.startsWith(queryLower);
-      if (aStarts && !bStarts) return -1;
-      if (!aStarts && bStarts) return 1;
-      
-      // Başlık içinde geçme
-      const aContains = aTitle.includes(queryLower);
-      const bContains = bTitle.includes(queryLower);
-      if (aContains && !bContains) return -1;
-      if (!aContains && bContains) return 1;
-      
-      return 0;
-    });
+      try {
+        // Sorguyu hazırla
+        const searchTerm = `%${query.trim()}%`;
+        
+        // Supabase'de ILIKE ile arama yap
+        const [moviesData, seriesData] = await Promise.all([
+          supabase
+            .from("movies")
+            .select("*")
+            .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
+            .limit(200),
+          supabase
+            .from("series")
+            .select("*")
+            .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
+            .limit(50),
+        ]);
+        
+        // İptal edildiyse sonuçları güncelleme
+        if (controller.signal.aborted) return;
+        
+        const allMovies = moviesData.data || [];
+        const allSeries = seriesData.data || [];
+        const allContent = [...allMovies, ...allSeries];
+        
+        // Sonuçları sırala
+        const queryLower = query.toLowerCase();
+        allContent.sort((a, b) => {
+          const aTitle = a.title?.toLowerCase() || '';
+          const bTitle = b.title?.toLowerCase() || '';
+          
+          const aExact = aTitle === queryLower;
+          const bExact = bTitle === queryLower;
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+          
+          const aStarts = aTitle.startsWith(queryLower);
+          const bStarts = bTitle.startsWith(queryLower);
+          if (aStarts && !bStarts) return -1;
+          if (!aStarts && bStarts) return 1;
+          
+          const aContains = aTitle.includes(queryLower);
+          const bContains = bTitle.includes(queryLower);
+          if (aContains && !bContains) return -1;
+          if (!aContains && bContains) return 1;
+          
+          return 0;
+        });
+        
+        setResults(allContent);
+      } catch (error) {
+        console.error("Search error:", error);
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    };
     
-    setResults(allContent);
-    setLoading(false);
-  };
+    searchContent();
+    
+    return () => {
+      controller.abort();
+    };
+  }, [query]);
 
   if (loading) {
     return (
