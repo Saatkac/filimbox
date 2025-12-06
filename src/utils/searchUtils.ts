@@ -20,7 +20,7 @@ export const normalizeTurkish = (text: string): string => {
 
 // Boşlukları ve özel karakterleri kaldır
 export const removeSpacesAndSpecialChars = (text: string): string => {
-  return text.replace(/[\s\-_:.,'!?()]/g, '');
+  return text.replace(/[\s\-_:.,'!?()0-9]/g, '');
 };
 
 // API ile çeviri yap
@@ -56,42 +56,43 @@ export const detectLanguage = (text: string): 'tr' | 'en' => {
   return 'en';
 };
 
-// Gelişmiş eşleştirme kontrolü - daha sıkı filtreleme
+// Gelişmiş eşleştirme kontrolü
 export const advancedMatch = (text: string, query: string): boolean => {
   if (!text || !query) return false;
   
+  const trimmedQuery = query.trim();
+  
   // Minimum 2 karakter gerekli
-  if (query.trim().length < 2) return false;
+  if (trimmedQuery.length < 2) return false;
   
   const normalizedText = normalizeTurkish(text);
-  const normalizedQuery = normalizeTurkish(query.trim());
+  const normalizedQuery = normalizeTurkish(trimmedQuery);
   
-  // Çok kısa sorgular için sadece kelime başı eşleşmesi
-  if (normalizedQuery.length < 3) {
-    const textWords = normalizedText.split(/\s+/);
-    return textWords.some(word => word.startsWith(normalizedQuery));
+  // 1. Direkt içerik eşleşmesi (en önemli)
+  if (normalizedText.includes(normalizedQuery)) {
+    return true;
   }
   
-  // Direkt eşleşme (sorgu metin içinde geçiyor mu)
-  if (normalizedText.includes(normalizedQuery)) return true;
-  
-  // Boşluksuz eşleşme (alaca karanlık = alacakaranlık)
+  // 2. Boşluksuz eşleşme (alaca karanlık = alacakaranlık)
   const textNoSpaces = removeSpacesAndSpecialChars(normalizedText);
   const queryNoSpaces = removeSpacesAndSpecialChars(normalizedQuery);
-  if (queryNoSpaces.length >= 3 && textNoSpaces.includes(queryNoSpaces)) return true;
+  if (queryNoSpaces.length >= 2 && textNoSpaces.includes(queryNoSpaces)) {
+    return true;
+  }
   
-  // Kelime bazlı eşleşme - TÜM kelimeler metinde olmalı
+  // 3. Çoklu kelime araması - TÜM kelimeler metinde olmalı
   const queryWords = normalizedQuery.split(/\s+/).filter(w => w.length >= 2);
   if (queryWords.length > 1) {
     const allWordsMatch = queryWords.every(word => normalizedText.includes(word));
     if (allWordsMatch) return true;
   }
   
-  // Tek kelime sorgular için: kelime başında eşleşme
-  if (queryWords.length === 1 && queryWords[0].length >= 3) {
-    const textWords = normalizedText.split(/\s+/);
-    const hasWordStartMatch = textWords.some(tWord => tWord.startsWith(queryWords[0]));
-    if (hasWordStartMatch) return true;
+  // 4. Tek kelime için kısmi eşleşme
+  if (queryWords.length === 1 && queryWords[0].length >= 2) {
+    // Kelime herhangi bir yerde geçiyor mu?
+    if (normalizedText.includes(queryWords[0])) {
+      return true;
+    }
   }
   
   return false;
