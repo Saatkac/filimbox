@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.admin-chat]
 verify_jwt = false
+
+[functions.translate]
+verify_jwt = false
+
+[functions.invite-to-party]
+verify_jwt = false
