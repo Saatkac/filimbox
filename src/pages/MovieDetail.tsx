@@ -6,6 +6,7 @@ import MovieCard from "@/components/MovieCard";
 import CommentSection from "@/components/CommentSection";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminSettings } from "@/hooks/useAdminSettings";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +26,7 @@ interface Episode {
 const MovieDetail = () => {
   const { id } = useParams();
   const { user } = useAuth();
+  const { settings } = useAdminSettings();
   const { toast } = useToast();
   const [content, setContent] = useState<any>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -308,6 +310,8 @@ const MovieDetail = () => {
                 src={content.video_url}
                 poster={content.backdrop_url || content.poster_url}
                 initialProgress={watchProgress}
+                showQualitySelector={settings.quality_selector_enabled}
+                showPlaybackSpeed={settings.playback_speed_enabled}
                 onProgressUpdate={(current, duration) => {
                   saveWatchProgress(current, duration);
                 }}
@@ -330,6 +334,8 @@ const MovieDetail = () => {
               src={videoSrc}
               poster={content.backdrop_url || content.poster_url}
               initialProgress={watchProgress}
+              showQualitySelector={settings.quality_selector_enabled}
+              showPlaybackSpeed={settings.playback_speed_enabled}
               onProgressUpdate={(current, duration) => {
                 saveWatchProgress(current, duration);
               }}
@@ -358,14 +364,16 @@ const MovieDetail = () => {
                 <h1 className="text-4xl md:text-5xl font-bold gold-glow">
                   {content.title}
                 </h1>
-                <Button
-                  onClick={toggleFavorite}
-                  variant="outline"
-                  size="icon"
-                  className="border-gold hover:bg-gold/20"
-                >
-                  <Heart className={`w-6 h-6 ${isFavorite ? "fill-gold text-gold" : "text-gold"}`} />
-                </Button>
+                {settings.favorites_enabled && (
+                  <Button
+                    onClick={toggleFavorite}
+                    variant="outline"
+                    size="icon"
+                    className="border-gold hover:bg-gold/20"
+                  >
+                    <Heart className={`w-6 h-6 ${isFavorite ? "fill-gold text-gold" : "text-gold"}`} />
+                  </Button>
+                )}
               </div>
               
               <div className="flex flex-wrap items-center gap-4 mb-6">
@@ -462,9 +470,11 @@ const MovieDetail = () => {
           </div>
         </div>
 
-        <div className="container mx-auto px-4 pb-16">
-          <CommentSection movieId={isMovie ? id : undefined} seriesId={!isMovie ? id : undefined} />
-        </div>
+        {settings.comments_enabled && (
+          <div className="container mx-auto px-4 pb-16">
+            <CommentSection movieId={isMovie ? id : undefined} seriesId={!isMovie ? id : undefined} />
+          </div>
+        )}
 
         {similarContent.length > 0 && (
           <div className="container mx-auto px-4 pb-16">
