@@ -50,7 +50,7 @@ const Index = () => {
 
   useEffect(() => {
     loadContent(1);
-  }, []);
+  }, [loadContent]);
 
   useEffect(() => {
     const el = loadMoreRef.current;

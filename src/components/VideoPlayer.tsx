@@ -459,20 +459,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     }
   }, [isMuted]);
 
+  // Initial controls visibility timeout - runs once on mount
   useEffect(() => {
-    if (controlsTimeout) {
-      clearTimeout(controlsTimeout);
-    }
-    
     const timeout = setTimeout(() => {
       setShowControls(false);
     }, 3000);
-    setControlsTimeout(timeout);
 
     return () => {
-      if (controlsTimeout) {
-        clearTimeout(controlsTimeout);
-      }
+      clearTimeout(timeout);
     };
   }, []);
 
