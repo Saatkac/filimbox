@@ -6,6 +6,7 @@ interface AdminSettings {
   playback_speed_enabled: boolean;
   comments_enabled: boolean;
   favorites_enabled: boolean;
+  skip_controls_enabled: boolean;
 }
 
 interface AdminSettingsContextType {
@@ -20,6 +21,7 @@ const defaultSettings: AdminSettings = {
   playback_speed_enabled: true,
   comments_enabled: true,
   favorites_enabled: true,
+  skip_controls_enabled: true,
 };
 
 const AdminSettingsContext = createContext<AdminSettingsContextType | undefined>(undefined);
