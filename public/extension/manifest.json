@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Video Player Helper",
-  "version": "1.0.0",
-  "description": "HLS ve M3U8 video akışlarını sorunsuz oynatmak için yardımcı eklenti",
+  "version": "1.1.0",
+  "description": "HLS ve M3U8 video akışlarını sorunsuz oynatmak ve sayfa temizliği için yardımcı eklenti",
   "permissions": [
     "declarativeNetRequest",
     "declarativeNetRequestWithHostAccess",
-    "storage"
+    "storage",
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -18,6 +20,13 @@
       "path": "rules.json"
     }]
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
