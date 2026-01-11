@@ -312,6 +312,7 @@ const MovieDetail = () => {
                 initialProgress={watchProgress}
                 showQualitySelector={settings.quality_selector_enabled}
                 showPlaybackSpeed={settings.playback_speed_enabled}
+                showSkipControls={settings.skip_controls_enabled}
                 onProgressUpdate={(current, duration) => {
                   saveWatchProgress(current, duration);
                 }}
@@ -336,6 +337,7 @@ const MovieDetail = () => {
               initialProgress={watchProgress}
               showQualitySelector={settings.quality_selector_enabled}
               showPlaybackSpeed={settings.playback_speed_enabled}
+              showSkipControls={settings.skip_controls_enabled}
               onProgressUpdate={(current, duration) => {
                 saveWatchProgress(current, duration);
               }}

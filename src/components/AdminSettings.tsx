@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Video, MessageSquare, Heart, Gauge } from 'lucide-react';
+import { Settings, Video, MessageSquare, Heart, Gauge, SkipForward } from 'lucide-react';
 
 const settingsConfig = [
   {
@@ -17,6 +17,12 @@ const settingsConfig = [
     label: 'Oynatma Hızı',
     description: 'Kullanıcıların oynatma hızını değiştirmesine izin ver',
     icon: Gauge,
+  },
+  {
+    key: 'skip_controls_enabled' as const,
+    label: '5 Saniye İleri/Geri',
+    description: '5 saniye ileri ve geri alma butonlarını göster',
+    icon: SkipForward,
   },
   {
     key: 'comments_enabled' as const,

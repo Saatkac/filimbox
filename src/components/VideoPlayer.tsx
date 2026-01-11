@@ -52,6 +52,7 @@ interface VideoPlayerProps {
   onPlayingChange?: (playing: boolean) => void;
   showQualitySelector?: boolean;
   showPlaybackSpeed?: boolean;
+  showSkipControls?: boolean;
 }
 
 export interface VideoPlayerRef {
@@ -70,7 +71,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   onSeek,
   onPlayingChange,
   showQualitySelector = true,
-  showPlaybackSpeed = true
+  showPlaybackSpeed = true,
+  showSkipControls = true
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -254,17 +256,37 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         setIsReady(true);
         retryCountRef.current = 0;
         
-        // Extract quality levels
+        // Extract quality levels and normalize to standard resolutions
         if (data.levels && data.levels.length > 0) {
-          const levels: QualityLevel[] = data.levels.map((level: any, index: number) => ({
-            height: level.height || 0,
-            bitrate: level.bitrate || 0,
-            index,
-            label: level.height ? `${level.height}p` : `${Math.round((level.bitrate || 0) / 1000)}kbps`
-          }));
-          // Sort by height descending
-          levels.sort((a, b) => b.height - a.height);
-          setQualityLevels(levels);
+          const standardResolutions = [
+            { min: 1800, label: '1080p', target: 1080 },
+            { min: 1000, label: '720p', target: 720 },
+            { min: 700, label: '480p', target: 480 },
+            { min: 400, label: '360p', target: 360 },
+            { min: 0, label: '240p', target: 240 }
+          ];
+          
+          const levels: QualityLevel[] = data.levels.map((level: any, index: number) => {
+            const height = level.height || 0;
+            // Find the closest standard resolution
+            const standard = standardResolutions.find(s => height >= s.min) || standardResolutions[standardResolutions.length - 1];
+            return {
+              height: standard.target,
+              bitrate: level.bitrate || 0,
+              index,
+              label: standard.label
+            };
+          });
+          
+          // Remove duplicates by label and sort by height descending
+          const uniqueLevels = levels.reduce((acc: QualityLevel[], curr) => {
+            if (!acc.find(l => l.label === curr.label)) {
+              acc.push(curr);
+            }
+            return acc;
+          }, []);
+          uniqueLevels.sort((a, b) => b.height - a.height);
+          setQualityLevels(uniqueLevels);
         }
         
         if (initialProgress > 0) {
@@ -668,22 +690,26 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
                 {/* Left Side Controls */}
                 <div className="flex items-center gap-2 md:gap-3">
                   {/* Skip Backward */}
-                  <button
-                    onClick={() => skipTime(-10)}
-                    className="text-white hover:text-gold transition-colors"
-                    title="10 saniye geri"
-                  >
-                    <SkipBack className="w-5 h-5 md:w-6 md:h-6" />
-                  </button>
+                  {showSkipControls && (
+                    <button
+                      onClick={() => skipTime(-5)}
+                      className="text-white hover:text-gold transition-colors"
+                      title="5 saniye geri"
+                    >
+                      <SkipBack className="w-5 h-5 md:w-6 md:h-6" />
+                    </button>
+                  )}
 
                   {/* Skip Forward */}
-                  <button
-                    onClick={() => skipTime(10)}
-                    className="text-white hover:text-gold transition-colors"
-                    title="10 saniye ileri"
-                  >
-                    <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
-                  </button>
+                  {showSkipControls && (
+                    <button
+                      onClick={() => skipTime(5)}
+                      className="text-white hover:text-gold transition-colors"
+                      title="5 saniye ileri"
+                    >
+                      <SkipForward className="w-5 h-5 md:w-6 md:h-6" />
+                    </button>
+                  )}
 
                   {/* Volume Control */}
                   <div className="hidden md:flex items-center gap-2 w-[150px] lg:w-[200px]">
