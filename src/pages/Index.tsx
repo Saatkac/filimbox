@@ -12,8 +12,33 @@ const Index = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [featuredContent, setFeaturedContent] = useState<any>(null);
   const ITEMS_PER_PAGE = 30;
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  
+  // Load featured content
+  const loadFeaturedContent = useCallback(async () => {
+    const { data: featured } = await supabase
+      .from("featured_content")
+      .select("*, movies(*), series(*)")
+      .single();
+
+    if (featured?.movies) {
+      setFeaturedContent(featured.movies);
+    } else if (featured?.series) {
+      setFeaturedContent(featured.series);
+    } else {
+      // Default to latest movie
+      const { data: latestMovie } = await supabase
+        .from("movies")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      
+      setFeaturedContent(latestMovie);
+    }
+  }, []);
   
   const loadContent = useCallback(async (pageNum: number) => {
     if (pageNum === 1) setLoading(true); else setLoadingMore(true);
@@ -49,8 +74,9 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
+    loadFeaturedContent();
     loadContent(1);
-  }, [loadContent]);
+  }, [loadContent, loadFeaturedContent]);
 
   useEffect(() => {
     const el = loadMoreRef.current;
@@ -70,8 +96,6 @@ const Index = () => {
   const allContent = useMemo(() => movies, [movies]);
   
   const filteredContent = useMemo(() => allContent, [allContent]);
-
-  const featuredContent = useMemo(() => allContent[0], [allContent]);
 
   if (loading) {
     return (
