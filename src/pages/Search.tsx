@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
-import { Search as SearchIcon, Loader2 } from "lucide-react";
+import { Search as SearchIcon, Loader2, Filter, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { categories } from "@/data/categories";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
@@ -12,6 +15,23 @@ const Search = () => {
   const [loading, setLoading] = useState(true);
   const lastQueryRef = useRef<string>("");
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [selectedRating, setSelectedRating] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("relevance");
+  
+  // Generate year options (last 50 years)
+  const yearOptions = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const years: string[] = [];
+    for (let year = currentYear; year >= currentYear - 50; year--) {
+      years.push(year.toString());
+    }
+    return years;
+  }, []);
   
   useEffect(() => {
     // Aynı sorgu için tekrar arama yapma
@@ -48,19 +68,19 @@ const Search = () => {
             .from("movies")
             .select("*")
             .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
-            .limit(200),
+            .limit(500),
           supabase
             .from("series")
             .select("*")
             .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
-            .limit(50),
+            .limit(100),
         ]);
         
         // İptal edildiyse sonuçları güncelleme
         if (controller.signal.aborted) return;
         
-        const allMovies = moviesData.data || [];
-        const allSeries = seriesData.data || [];
+        const allMovies = (moviesData.data || []).map(m => ({ ...m, contentType: 'movie' }));
+        const allSeries = (seriesData.data || []).map(s => ({ ...s, contentType: 'series' }));
         const allContent = [...allMovies, ...allSeries];
         
         // Sonuçları sırala
@@ -103,6 +123,47 @@ const Search = () => {
       controller.abort();
     };
   }, [query]);
+  
+  // Filtered and sorted results
+  const filteredResults = useMemo(() => {
+    let filtered = [...results];
+    
+    // Category filter
+    if (selectedCategory !== "all") {
+      filtered = filtered.filter(item => item.category === selectedCategory);
+    }
+    
+    // Year filter
+    if (selectedYear !== "all") {
+      filtered = filtered.filter(item => item.year?.toString() === selectedYear);
+    }
+    
+    // Rating filter
+    if (selectedRating !== "all") {
+      const minRating = parseFloat(selectedRating);
+      filtered = filtered.filter(item => (item.rating || 0) >= minRating);
+    }
+    
+    // Sorting
+    if (sortBy === "rating") {
+      filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else if (sortBy === "year") {
+      filtered.sort((a, b) => (b.year || 0) - (a.year || 0));
+    } else if (sortBy === "title") {
+      filtered.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'tr'));
+    }
+    
+    return filtered;
+  }, [results, selectedCategory, selectedYear, selectedRating, sortBy]);
+  
+  const clearFilters = useCallback(() => {
+    setSelectedCategory("all");
+    setSelectedYear("all");
+    setSelectedRating("all");
+    setSortBy("relevance");
+  }, []);
+  
+  const hasActiveFilters = selectedCategory !== "all" || selectedYear !== "all" || selectedRating !== "all" || sortBy !== "relevance";
 
   if (loading) {
     return (
@@ -123,21 +184,114 @@ const Search = () => {
       <Navbar />
       
       <div className="container mx-auto px-4 pt-32 pb-16">
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-4">
-            <SearchIcon className="w-8 h-8 text-gold" />
-            <h1 className="text-4xl font-bold">
-              Arama Sonuçları
-            </h1>
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <SearchIcon className="w-8 h-8 text-gold" />
+              <h1 className="text-3xl sm:text-4xl font-bold">
+                Arama Sonuçları
+              </h1>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className={hasActiveFilters ? "border-gold text-gold" : ""}
+            >
+              <Filter className="w-4 h-4 mr-2" />
+              Filtrele
+              {hasActiveFilters && (
+                <span className="ml-2 w-2 h-2 bg-gold rounded-full" />
+              )}
+            </Button>
           </div>
           <p className="text-muted-foreground">
-            "<span className="text-gold">{query}</span>" için {results.length} sonuç bulundu
+            "<span className="text-gold">{query}</span>" için {filteredResults.length} sonuç bulundu
+            {hasActiveFilters && ` (toplam ${results.length})`}
           </p>
         </div>
 
-        {results.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {results.map((item) => (
+        {/* Filters */}
+        {showFilters && (
+          <div className="mb-8 p-4 bg-card rounded-lg border border-border">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold">Filtreler</h3>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  <X className="w-4 h-4 mr-2" />
+                  Temizle
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Kategori</label>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="bg-secondary">
+                    <SelectValue placeholder="Tümü" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tümü</SelectItem>
+                    {categories.filter(c => c !== "Tümü").map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Yıl</label>
+                <Select value={selectedYear} onValueChange={setSelectedYear}>
+                  <SelectTrigger className="bg-secondary">
+                    <SelectValue placeholder="Tümü" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tümü</SelectItem>
+                    {yearOptions.map(year => (
+                      <SelectItem key={year} value={year}>{year}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Min. IMDb</label>
+                <Select value={selectedRating} onValueChange={setSelectedRating}>
+                  <SelectTrigger className="bg-secondary">
+                    <SelectValue placeholder="Tümü" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tümü</SelectItem>
+                    <SelectItem value="9">9+</SelectItem>
+                    <SelectItem value="8">8+</SelectItem>
+                    <SelectItem value="7">7+</SelectItem>
+                    <SelectItem value="6">6+</SelectItem>
+                    <SelectItem value="5">5+</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm text-muted-foreground">Sıralama</label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="bg-secondary">
+                    <SelectValue placeholder="İlgililik" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="relevance">İlgililik</SelectItem>
+                    <SelectItem value="rating">IMDb Puanı</SelectItem>
+                    <SelectItem value="year">Yıl</SelectItem>
+                    <SelectItem value="title">İsim (A-Z)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {filteredResults.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+            {filteredResults.map((item) => (
               <MovieCard
                 key={item.id}
                 id={item.id}
@@ -156,7 +310,7 @@ const Search = () => {
               Aramanıza uygun içerik bulunamadı.
             </p>
             <p className="text-sm text-muted-foreground mt-2">
-              Farklı anahtar kelimeler deneyin.
+              Farklı anahtar kelimeler deneyin veya filtreleri değiştirin.
             </p>
           </div>
         )}

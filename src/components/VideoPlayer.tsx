@@ -256,25 +256,44 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         setIsReady(true);
         retryCountRef.current = 0;
         
-        // Extract quality levels and normalize to standard resolutions
+        // Extract quality from URL first (e.g., 1080p in filename)
+        const urlQualityMatch = cleanSrc.match(/(\d{3,4})p/i);
+        const urlQuality = urlQualityMatch ? parseInt(urlQualityMatch[1]) : null;
+        
+        // Extract quality levels
         if (data.levels && data.levels.length > 0) {
-          const standardResolutions = [
-            { min: 1800, label: '1080p', target: 1080 },
-            { min: 1000, label: '720p', target: 720 },
-            { min: 700, label: '480p', target: 480 },
-            { min: 400, label: '360p', target: 360 },
-            { min: 0, label: '240p', target: 240 }
-          ];
-          
           const levels: QualityLevel[] = data.levels.map((level: any, index: number) => {
-            const height = level.height || 0;
-            // Find the closest standard resolution
-            const standard = standardResolutions.find(s => height >= s.min) || standardResolutions[standardResolutions.length - 1];
+            // Priority: URL quality > level.height > bitrate estimation
+            let height = level.height || 0;
+            
+            // If URL has quality info and level height is 0 or very different, use URL quality
+            if (urlQuality && (height === 0 || Math.abs(height - urlQuality) > 200)) {
+              height = urlQuality;
+            }
+            
+            // If still no height, estimate from bitrate
+            if (height === 0 && level.bitrate) {
+              if (level.bitrate > 5000000) height = 1080;
+              else if (level.bitrate > 2500000) height = 720;
+              else if (level.bitrate > 1000000) height = 480;
+              else if (level.bitrate > 500000) height = 360;
+              else height = 240;
+            }
+            
+            // Determine label based on height
+            let label: string;
+            if (height >= 2160) label = '4K';
+            else if (height >= 1080) label = '1080p';
+            else if (height >= 720) label = '720p';
+            else if (height >= 480) label = '480p';
+            else if (height >= 360) label = '360p';
+            else label = '240p';
+            
             return {
-              height: standard.target,
+              height,
               bitrate: level.bitrate || 0,
               index,
-              label: standard.label
+              label
             };
           });
           
@@ -286,7 +305,37 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
             return acc;
           }, []);
           uniqueLevels.sort((a, b) => b.height - a.height);
+          
+          // If only one level and URL has quality, show that
+          if (uniqueLevels.length === 1 && urlQuality) {
+            let label: string;
+            if (urlQuality >= 2160) label = '4K';
+            else if (urlQuality >= 1080) label = '1080p';
+            else if (urlQuality >= 720) label = '720p';
+            else if (urlQuality >= 480) label = '480p';
+            else if (urlQuality >= 360) label = '360p';
+            else label = '240p';
+            uniqueLevels[0].height = urlQuality;
+            uniqueLevels[0].label = label;
+          }
+          
           setQualityLevels(uniqueLevels);
+        } else if (urlQuality) {
+          // No levels from manifest but URL has quality
+          let label: string;
+          if (urlQuality >= 2160) label = '4K';
+          else if (urlQuality >= 1080) label = '1080p';
+          else if (urlQuality >= 720) label = '720p';
+          else if (urlQuality >= 480) label = '480p';
+          else if (urlQuality >= 360) label = '360p';
+          else label = '240p';
+          
+          setQualityLevels([{
+            height: urlQuality,
+            bitrate: 0,
+            index: 0,
+            label
+          }]);
         }
         
         if (initialProgress > 0) {

@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2, MessageSquare, AlertTriangle, Settings } from "lucide-react";
+import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2, MessageSquare, AlertTriangle, Settings, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { categories } from "@/data/categories";
 import { z } from "zod";
@@ -16,6 +16,7 @@ import { parseM3U } from "@/utils/m3uParser";
 import MovieCard from "@/components/MovieCard";
 import AdminChat from "@/components/AdminChat";
 import AdminSettings from "@/components/AdminSettings";
+import FeaturedContentManager from "@/components/FeaturedContentManager";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -453,10 +454,14 @@ const Admin = () => {
         </div>
 
         <Tabs defaultValue="settings" className="space-y-6">
-          <TabsList className="bg-card">
+          <TabsList className="bg-card flex-wrap">
             <TabsTrigger value="settings">
               <Settings className="w-4 h-4 mr-2" />
               Ayarlar
+            </TabsTrigger>
+            <TabsTrigger value="featured">
+              <Star className="w-4 h-4 mr-2" />
+              Öne Çıkan
             </TabsTrigger>
             <TabsTrigger value="chat">
               <MessageSquare className="w-4 h-4 mr-2" />
@@ -482,6 +487,10 @@ const Admin = () => {
 
           <TabsContent value="settings">
             <AdminSettings />
+          </TabsContent>
+
+          <TabsContent value="featured">
+            <FeaturedContentManager />
           </TabsContent>
 
           <TabsContent value="chat">
