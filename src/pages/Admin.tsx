@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2, MessageSquare, AlertTriangle, Settings, Star } from "lucide-react";
+import { Film, Tv, LogOut, Trash2, Plus, Upload, Loader2, MessageSquare, AlertTriangle, Settings, Star, Headphones } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { categories } from "@/data/categories";
 import { z } from "zod";
@@ -17,6 +17,7 @@ import MovieCard from "@/components/MovieCard";
 import AdminChat from "@/components/AdminChat";
 import AdminSettings from "@/components/AdminSettings";
 import FeaturedContentManager from "@/components/FeaturedContentManager";
+import AdminSupportRequests from "@/components/AdminSupportRequests";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -463,6 +464,10 @@ const Admin = () => {
               <Star className="w-4 h-4 mr-2" />
               Öne Çıkan
             </TabsTrigger>
+            <TabsTrigger value="requests">
+              <Headphones className="w-4 h-4 mr-2" />
+              Talepler
+            </TabsTrigger>
             <TabsTrigger value="chat">
               <MessageSquare className="w-4 h-4 mr-2" />
               AI Asistan
@@ -491,6 +496,10 @@ const Admin = () => {
 
           <TabsContent value="featured">
             <FeaturedContentManager />
+          </TabsContent>
+
+          <TabsContent value="requests">
+            <AdminSupportRequests />
           </TabsContent>
 
           <TabsContent value="chat">
