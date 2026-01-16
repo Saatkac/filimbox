@@ -215,14 +215,18 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     setError(null);
     setIsReady(false);
 
-    // Check if it's a direct video file (mp4, webm, mkv, etc.)
-    const isDirectVideo = /\.(mp4|webm|mkv|avi|mov|ogv)(\?|$)/i.test(cleanSrc);
+    // Check if it's a direct video file (mp4, webm, mkv, avi, mov, etc.)
+    const videoExtensions = ['mp4', 'webm', 'mkv', 'avi', 'mov', 'ogv', 'ogg', 'm4v', 'flv', 'wmv', '3gp'];
+    const urlPath = cleanSrc.split('?')[0].toLowerCase();
+    const isDirectVideo = videoExtensions.some(ext => urlPath.endsWith(`.${ext}`));
     
     if (isDirectVideo) {
-      // Direct video playback (including MKV)
+      console.log('[VideoPlayer] Direct video file detected:', cleanSrc);
+      // Direct video playback (including MKV, AVI, etc.)
       videoElement.src = cleanSrc;
       
-      videoElement.onloadedmetadata = () => {
+      const handleLoadedMetadata = () => {
+        console.log('[VideoPlayer] Direct video loaded, duration:', videoElement.duration);
         setIsReady(true);
         setDuration(videoElement.duration);
         if (initialProgress > 0) {
@@ -230,8 +234,25 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         }
       };
       
-      videoElement.onerror = () => {
-        setError('Video yüklenemedi. Tarayıcınız bu formatı desteklemiyor olabilir.');
+      const handleError = (e: Event) => {
+        console.error('[VideoPlayer] Direct video error:', e);
+        setError('Video yüklenemedi. Tarayıcınız bu formatı desteklemiyor olabilir. (.mkv dosyaları için Chrome veya Edge kullanın)');
+      };
+      
+      const handleCanPlay = () => {
+        console.log('[VideoPlayer] Direct video can play');
+        setIsReady(true);
+        setIsBuffering(false);
+      };
+      
+      videoElement.addEventListener('loadedmetadata', handleLoadedMetadata);
+      videoElement.addEventListener('error', handleError);
+      videoElement.addEventListener('canplay', handleCanPlay);
+      
+      return () => {
+        videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        videoElement.removeEventListener('error', handleError);
+        videoElement.removeEventListener('canplay', handleCanPlay);
       };
       
     } else if (Hls.isSupported()) {
@@ -589,48 +610,65 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   // Keyboard controls - works in fullscreen too
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // In fullscreen mode, always handle keys
-      // Otherwise, only handle if container or its children have focus
-      const isFullscreenActive = document.fullscreenElement === containerRef.current;
-      const hasFocus = containerRef.current?.contains(document.activeElement);
+      // In fullscreen mode, always handle keys regardless of focus
+      const isFullscreenActive = !!document.fullscreenElement;
+      const hasFocus = containerRef.current?.contains(document.activeElement) || 
+                       document.activeElement === containerRef.current ||
+                       document.activeElement === document.body;
       
+      // If we're in fullscreen OR the container has focus, handle keys
       if (!isFullscreenActive && !hasFocus) return;
+      
+      // Don't handle if user is typing in an input
+      if (document.activeElement?.tagName === 'INPUT' || 
+          document.activeElement?.tagName === 'TEXTAREA') return;
       
       switch (e.key) {
         case ' ':
         case 'k':
           e.preventDefault();
+          e.stopPropagation();
           togglePlay();
           break;
         case 'ArrowLeft':
           e.preventDefault();
+          e.stopPropagation();
           skipTime(-10);
           break;
         case 'ArrowRight':
           e.preventDefault();
+          e.stopPropagation();
           skipTime(10);
           break;
         case 'ArrowUp':
           e.preventDefault();
+          e.stopPropagation();
           if (volume < 6) handleVolumeChange([Math.min(volume + 0.2, 6)]);
           break;
         case 'ArrowDown':
           e.preventDefault();
+          e.stopPropagation();
           if (volume > 0) handleVolumeChange([Math.max(volume - 0.2, 0)]);
           break;
         case 'f':
           e.preventDefault();
+          e.stopPropagation();
           toggleFullscreen();
           break;
         case 'm':
           e.preventDefault();
+          e.stopPropagation();
           toggleMute();
+          break;
+        case 'Escape':
+          // Let browser handle escape for exiting fullscreen
           break;
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // Use capture phase to catch events before they bubble
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [togglePlay, handleVolumeChange, toggleFullscreen, toggleMute, volume]);
 
   const formatTime = useMemo(() => {
