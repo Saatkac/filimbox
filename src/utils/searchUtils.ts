@@ -8,9 +8,6 @@ export const normalizeTurkish = (text: string): string => {
     const char = text[i];
     const code = text.charCodeAt(i);
     
-    // Debug log (silinebilir)
-    // console.log(`Char: ${char}, Code: ${code} (0x${code.toString(16)})`);
-    
     // Türkçe ve İngilizce i/I varyantları
     // ı = 305 (0x131), İ = 304 (0x130), I = 73 (0x49), i = 105 (0x69)
     if (code === 305 || code === 304 || code === 73 || code === 105) {
@@ -49,7 +46,7 @@ export const removeSpacesAndSpecialChars = (text: string): string => {
   return text.replace(/[\s\-_:.,'!?()]/g, '');
 };
 
-// Basit arama eşleştirmesi
+// Gelişmiş arama eşleştirmesi - Türkçe karakterler ve boşluklar için
 export const advancedMatch = (text: string, query: string): boolean => {
   if (!text || !query) return false;
   
@@ -61,12 +58,12 @@ export const advancedMatch = (text: string, query: string): boolean => {
   const normalizedText = normalizeTurkish(text);
   const normalizedQuery = normalizeTurkish(trimmedQuery);
   
-  // 1. Direkt içerik eşleşmesi
+  // 1. Direkt içerik eşleşmesi (örn: "alacakaranlık" içinde "alacakaranlık")
   if (normalizedText.includes(normalizedQuery)) {
     return true;
   }
   
-  // 2. Boşluksuz eşleşme (alaca karanlık = alacakaranlık)
+  // 2. Boşluksuz eşleşme (örn: "alaca karanlik" -> "alacakaranlik" eşleşir "alacakaranlık")
   const textNoSpaces = removeSpacesAndSpecialChars(normalizedText);
   const queryNoSpaces = removeSpacesAndSpecialChars(normalizedQuery);
   if (queryNoSpaces.length >= 2 && textNoSpaces.includes(queryNoSpaces)) {
@@ -78,6 +75,10 @@ export const advancedMatch = (text: string, query: string): boolean => {
   if (queryWords.length > 1) {
     const allWordsMatch = queryWords.every(word => normalizedText.includes(word));
     if (allWordsMatch) return true;
+    
+    // Ayrıca boşluksuz versiyonda da kelime parçalarını ara
+    const allWordsMatchNoSpaces = queryWords.every(word => textNoSpaces.includes(word));
+    if (allWordsMatchNoSpaces) return true;
   }
   
   // 4. Tek kelime için kısmi eşleşme
@@ -88,4 +89,62 @@ export const advancedMatch = (text: string, query: string): boolean => {
   }
   
   return false;
+};
+
+// Supabase için sorgu oluştur - Türkçe karakter varyasyonları ile
+export const generateSearchVariants = (query: string): string[] => {
+  if (!query) return [];
+  
+  const trimmed = query.trim();
+  const variants: string[] = [trimmed];
+  
+  // Boşluksuz versiyonu ekle
+  const noSpaces = trimmed.replace(/\s+/g, '');
+  if (noSpaces !== trimmed) {
+    variants.push(noSpaces);
+  }
+  
+  // Türkçe karakter değişimleri
+  const charMap: Record<string, string[]> = {
+    'i': ['i', 'ı', 'İ', 'I'],
+    'ı': ['i', 'ı', 'İ', 'I'],
+    'İ': ['i', 'ı', 'İ', 'I'],
+    'I': ['i', 'ı', 'İ', 'I'],
+    'o': ['o', 'ö', 'O', 'Ö'],
+    'ö': ['o', 'ö', 'O', 'Ö'],
+    'O': ['o', 'ö', 'O', 'Ö'],
+    'Ö': ['o', 'ö', 'O', 'Ö'],
+    'u': ['u', 'ü', 'U', 'Ü'],
+    'ü': ['u', 'ü', 'U', 'Ü'],
+    'U': ['u', 'ü', 'U', 'Ü'],
+    'Ü': ['u', 'ü', 'U', 'Ü'],
+    's': ['s', 'ş', 'S', 'Ş'],
+    'ş': ['s', 'ş', 'S', 'Ş'],
+    'S': ['s', 'ş', 'S', 'Ş'],
+    'Ş': ['s', 'ş', 'S', 'Ş'],
+    'g': ['g', 'ğ', 'G', 'Ğ'],
+    'ğ': ['g', 'ğ', 'G', 'Ğ'],
+    'G': ['g', 'ğ', 'G', 'Ğ'],
+    'Ğ': ['g', 'ğ', 'G', 'Ğ'],
+    'c': ['c', 'ç', 'C', 'Ç'],
+    'ç': ['c', 'ç', 'C', 'Ç'],
+    'C': ['c', 'ç', 'C', 'Ç'],
+    'Ç': ['c', 'ç', 'C', 'Ç'],
+  };
+  
+  // Ana sorgu için Türkçe versiyonunu oluştur
+  let turkishVariant = '';
+  for (const char of trimmed) {
+    if (charMap[char]) {
+      // İlk Türkçe karakteri al
+      turkishVariant += charMap[char].find(c => c.charCodeAt(0) > 127) || char;
+    } else {
+      turkishVariant += char;
+    }
+  }
+  if (turkishVariant !== trimmed) {
+    variants.push(turkishVariant);
+  }
+  
+  return [...new Set(variants)];
 };

@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import SupportRequestDialog from "@/components/SupportRequestDialog";
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -82,6 +83,7 @@ const Navbar = () => {
                     Admin
                   </Button>
                 )}
+                <SupportRequestDialog />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="focus:outline-none touch-manipulation">
