@@ -7,6 +7,7 @@ import { Search as SearchIcon, Loader2, Filter, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { categories } from "@/data/categories";
+import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars } from "@/utils/searchUtils";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
@@ -59,20 +60,52 @@ const Search = () => {
       lastQueryRef.current = query;
       
       try {
-        // Sorguyu hazırla
-        const searchTerm = `%${query.trim()}%`;
+        const trimmedQuery = query.trim();
+        
+        // Normalize query for Turkish chars
+        const normalizedQuery = normalizeTurkish(trimmedQuery);
+        const queryNoSpaces = removeSpacesAndSpecialChars(normalizedQuery);
+        
+        // Generate search variants for ilike
+        // Original query, without spaces, with Turkish chars converted
+        const searchVariants = [
+          trimmedQuery,
+          trimmedQuery.replace(/\s+/g, ''), // No spaces
+        ];
+        
+        // Add Turkish char variants
+        const turkishMap: Record<string, string> = {
+          'i': 'ı', 'I': 'İ', 'o': 'ö', 'O': 'Ö',
+          'u': 'ü', 'U': 'Ü', 's': 'ş', 'S': 'Ş',
+          'g': 'ğ', 'G': 'Ğ', 'c': 'ç', 'C': 'Ç'
+        };
+        
+        let turkishVariant = '';
+        for (const char of trimmedQuery) {
+          turkishVariant += turkishMap[char] || char;
+        }
+        if (turkishVariant !== trimmedQuery) {
+          searchVariants.push(turkishVariant);
+          searchVariants.push(turkishVariant.replace(/\s+/g, ''));
+        }
+        
+        // Build OR conditions for each variant
+        const orConditions = searchVariants
+          .filter((v, i, arr) => arr.indexOf(v) === i) // unique
+          .map(v => `title.ilike.%${v}%,description.ilike.%${v}%`)
+          .join(',');
         
         // Supabase'de ILIKE ile arama yap
         const [moviesData, seriesData] = await Promise.all([
           supabase
             .from("movies")
             .select("*")
-            .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
+            .or(orConditions)
             .limit(500),
           supabase
             .from("series")
             .select("*")
-            .or(`title.ilike.${searchTerm},description.ilike.${searchTerm},category.ilike.${searchTerm}`)
+            .or(orConditions)
             .limit(100),
         ]);
         
@@ -81,26 +114,37 @@ const Search = () => {
         
         const allMovies = (moviesData.data || []).map(m => ({ ...m, contentType: 'movie' }));
         const allSeries = (seriesData.data || []).map(s => ({ ...s, contentType: 'series' }));
-        const allContent = [...allMovies, ...allSeries];
+        let allContent = [...allMovies, ...allSeries];
         
-        // Sonuçları sırala
-        const queryLower = query.toLowerCase();
+        // Client-side advanced matching for better Turkish support
+        allContent = allContent.filter(item => {
+          const title = item.title || '';
+          const description = item.description || '';
+          return advancedMatch(title, trimmedQuery) || advancedMatch(description, trimmedQuery);
+        });
+        
+        // Sonuçları sırala - normalize edilmiş karşılaştırma ile
         allContent.sort((a, b) => {
-          const aTitle = a.title?.toLowerCase() || '';
-          const bTitle = b.title?.toLowerCase() || '';
+          const aTitle = normalizeTurkish(a.title || '');
+          const bTitle = normalizeTurkish(b.title || '');
+          const queryNorm = normalizeTurkish(trimmedQuery);
+          const queryNormNoSpaces = removeSpacesAndSpecialChars(queryNorm);
           
-          const aExact = aTitle === queryLower;
-          const bExact = bTitle === queryLower;
+          // Exact match
+          const aExact = aTitle === queryNorm || removeSpacesAndSpecialChars(aTitle) === queryNormNoSpaces;
+          const bExact = bTitle === queryNorm || removeSpacesAndSpecialChars(bTitle) === queryNormNoSpaces;
           if (aExact && !bExact) return -1;
           if (!aExact && bExact) return 1;
           
-          const aStarts = aTitle.startsWith(queryLower);
-          const bStarts = bTitle.startsWith(queryLower);
+          // Starts with
+          const aStarts = aTitle.startsWith(queryNorm) || removeSpacesAndSpecialChars(aTitle).startsWith(queryNormNoSpaces);
+          const bStarts = bTitle.startsWith(queryNorm) || removeSpacesAndSpecialChars(bTitle).startsWith(queryNormNoSpaces);
           if (aStarts && !bStarts) return -1;
           if (!aStarts && bStarts) return 1;
           
-          const aContains = aTitle.includes(queryLower);
-          const bContains = bTitle.includes(queryLower);
+          // Contains
+          const aContains = aTitle.includes(queryNorm);
+          const bContains = bTitle.includes(queryNorm);
           if (aContains && !bContains) return -1;
           if (!aContains && bContains) return 1;
           

@@ -215,7 +215,26 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     setError(null);
     setIsReady(false);
 
-    if (Hls.isSupported()) {
+    // Check if it's a direct video file (mp4, webm, mkv, etc.)
+    const isDirectVideo = /\.(mp4|webm|mkv|avi|mov|ogv)(\?|$)/i.test(cleanSrc);
+    
+    if (isDirectVideo) {
+      // Direct video playback (including MKV)
+      videoElement.src = cleanSrc;
+      
+      videoElement.onloadedmetadata = () => {
+        setIsReady(true);
+        setDuration(videoElement.duration);
+        if (initialProgress > 0) {
+          videoElement.currentTime = initialProgress;
+        }
+      };
+      
+      videoElement.onerror = () => {
+        setError('Video yüklenemedi. Tarayıcınız bu formatı desteklemiyor olabilir.');
+      };
+      
+    } else if (Hls.isSupported()) {
       const hls = new Hls({
         debug: false,
         enableWorker: true,
@@ -567,13 +586,15 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     setIsFullscreen(!isFullscreen);
   }, [isFullscreen]);
 
-  // Keyboard controls
+  // Keyboard controls - works in fullscreen too
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!container.contains(document.activeElement)) return;
+      // In fullscreen mode, always handle keys
+      // Otherwise, only handle if container or its children have focus
+      const isFullscreenActive = document.fullscreenElement === containerRef.current;
+      const hasFocus = containerRef.current?.contains(document.activeElement);
+      
+      if (!isFullscreenActive && !hasFocus) return;
       
       switch (e.key) {
         case ' ':

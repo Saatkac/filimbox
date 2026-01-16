@@ -152,7 +152,9 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
     setLoading(false);
   };
 
-  const handleDelete = async (commentId: string) => {
+  const handleDelete = async (commentId: string, commentUserId: string) => {
+    // Admin deleting someone else's comment - uses admin policy
+    // User deleting own comment - uses user policy
     const { error } = await supabase
       .from("comments")
       .delete()
@@ -162,7 +164,8 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
       toast({ title: "Başarılı", description: "Yorum silindi" });
       loadComments();
     } else {
-      toast({ variant: "destructive", title: "Hata", description: error.message });
+      console.error("Delete error:", error);
+      toast({ variant: "destructive", title: "Hata", description: "Yorum silinemedi: " + error.message });
     }
   };
 
@@ -253,7 +256,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(comment.id)}
+                      onClick={() => handleDelete(comment.id, comment.user_id)}
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     >
                       <Trash2 className="w-4 h-4" />
