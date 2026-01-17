@@ -3,11 +3,11 @@ import { useSearchParams } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
-import { Search as SearchIcon, Loader2, Filter, X } from "lucide-react";
+import { Search as SearchIcon, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { categories } from "@/data/categories";
-import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars } from "@/utils/searchUtils";
+import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars, generateSearchVariants } from "@/utils/searchUtils";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
@@ -17,8 +17,7 @@ const Search = () => {
   const lastQueryRef = useRef<string>("");
   const abortControllerRef = useRef<AbortController | null>(null);
   
-  // Filters
-  const [showFilters, setShowFilters] = useState(false);
+  // Filters - always visible now
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [selectedRating, setSelectedRating] = useState<string>("all");
@@ -66,32 +65,19 @@ const Search = () => {
         const normalizedQuery = normalizeTurkish(trimmedQuery);
         const queryNoSpaces = removeSpacesAndSpecialChars(normalizedQuery);
         
-        // Generate search variants for ilike
-        // Original query, without spaces, with Turkish chars converted
-        const searchVariants = [
-          trimmedQuery,
-          trimmedQuery.replace(/\s+/g, ''), // No spaces
-        ];
+        // Generate search variants using utility function
+        const searchVariants = generateSearchVariants(trimmedQuery);
         
-        // Add Turkish char variants
-        const turkishMap: Record<string, string> = {
-          'i': 'ı', 'I': 'İ', 'o': 'ö', 'O': 'Ö',
-          'u': 'ü', 'U': 'Ü', 's': 'ş', 'S': 'Ş',
-          'g': 'ğ', 'G': 'Ğ', 'c': 'ç', 'C': 'Ç'
-        };
-        
-        let turkishVariant = '';
-        for (const char of trimmedQuery) {
-          turkishVariant += turkishMap[char] || char;
+        // Also add ASCII normalized version
+        if (!searchVariants.includes(normalizedQuery)) {
+          searchVariants.push(normalizedQuery);
         }
-        if (turkishVariant !== trimmedQuery) {
-          searchVariants.push(turkishVariant);
-          searchVariants.push(turkishVariant.replace(/\s+/g, ''));
+        if (!searchVariants.includes(queryNoSpaces)) {
+          searchVariants.push(queryNoSpaces);
         }
         
         // Build OR conditions for each variant
-        const orConditions = searchVariants
-          .filter((v, i, arr) => arr.indexOf(v) === i) // unique
+        const orConditions = [...new Set(searchVariants)]
           .map(v => `title.ilike.%${v}%,description.ilike.%${v}%`)
           .join(',');
         
@@ -208,7 +194,6 @@ const Search = () => {
   }, []);
   
   const hasActiveFilters = selectedCategory !== "all" || selectedYear !== "all" || selectedRating !== "all" || sortBy !== "relevance";
-
   if (loading) {
     return (
       <div className="min-h-screen bg-cinema-dark">
@@ -229,25 +214,11 @@ const Search = () => {
       
       <div className="container mx-auto px-4 pt-32 pb-16">
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <SearchIcon className="w-8 h-8 text-gold" />
-              <h1 className="text-3xl sm:text-4xl font-bold">
-                Arama Sonuçları
-              </h1>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className={hasActiveFilters ? "border-gold text-gold" : ""}
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Filtrele
-              {hasActiveFilters && (
-                <span className="ml-2 w-2 h-2 bg-gold rounded-full" />
-              )}
-            </Button>
+          <div className="flex items-center gap-3 mb-4">
+            <SearchIcon className="w-8 h-8 text-gold" />
+            <h1 className="text-3xl sm:text-4xl font-bold">
+              Arama Sonuçları
+            </h1>
           </div>
           <p className="text-muted-foreground">
             "<span className="text-gold">{query}</span>" için {filteredResults.length} sonuç bulundu
@@ -255,10 +226,9 @@ const Search = () => {
           </p>
         </div>
 
-        {/* Filters */}
-        {showFilters && (
-          <div className="mb-8 p-4 bg-card rounded-lg border border-border">
-            <div className="flex items-center justify-between mb-4">
+        {/* Filters - Always visible */}
+        <div className="mb-8 p-4 bg-card rounded-lg border border-border">
+          <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Filtreler</h3>
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -329,9 +299,8 @@ const Search = () => {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
           </div>
-        )}
+        </div>
 
         {filteredResults.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
