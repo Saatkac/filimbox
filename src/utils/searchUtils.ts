@@ -86,18 +86,15 @@ export const generateSearchVariants = (query: string): string[] => {
     variants.push(noSpaces);
   }
   
-  // ASCII versiyonu (i -> i, ı -> i, ö -> o, vb.)
+  // ASCII versiyonu (ü -> u, ö -> o, ş -> s, vb.)
   const asciiVersion = normalizeTurkish(trimmed);
-  if (asciiVersion !== trimmed.toLowerCase()) {
-    variants.push(asciiVersion);
-    // ASCII boşluksuz
-    const asciiNoSpaces = asciiVersion.replace(/\s+/g, '');
-    if (asciiNoSpaces !== asciiVersion) {
-      variants.push(asciiNoSpaces);
-    }
+  variants.push(asciiVersion);
+  const asciiNoSpaces = asciiVersion.replace(/\s+/g, '');
+  if (asciiNoSpaces !== asciiVersion) {
+    variants.push(asciiNoSpaces);
   }
   
-  // Türkçe versiyon (i -> ı, o -> ö, vb.)
+  // Türkçe versiyon (u -> ü, o -> ö, s -> ş, vb.)
   const turkishCharMap: Record<string, string> = {
     'i': 'ı', 'I': 'İ',
     'o': 'ö', 'O': 'Ö',
@@ -111,13 +108,16 @@ export const generateSearchVariants = (query: string): string[] => {
   for (const char of trimmed) {
     turkishVariant += turkishCharMap[char] || char;
   }
-  if (turkishVariant !== trimmed) {
-    variants.push(turkishVariant);
-    // Türkçe boşluksuz
-    const turkishNoSpaces = turkishVariant.replace(/\s+/g, '');
-    if (turkishNoSpaces !== turkishVariant) {
-      variants.push(turkishNoSpaces);
-    }
+  variants.push(turkishVariant);
+  const turkishNoSpaces = turkishVariant.replace(/\s+/g, '');
+  if (turkishNoSpaces !== turkishVariant) {
+    variants.push(turkishNoSpaces);
+  }
+  
+  // Küçük harf versiyonları da ekle
+  const lowerTrimmed = trimmed.toLowerCase();
+  if (lowerTrimmed !== trimmed) {
+    variants.push(lowerTrimmed);
   }
   
   return [...new Set(variants)];
