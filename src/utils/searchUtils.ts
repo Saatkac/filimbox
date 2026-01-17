@@ -1,41 +1,23 @@
-// Türkçe karakterleri normalize et - karakter kodlarıyla
+// Türkçe karakterleri normalize et
 export const normalizeTurkish = (text: string): string => {
   if (!text) return '';
   
-  let result = '';
+  // Önce küçük harfe çevir
+  let normalized = text.toLowerCase();
   
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const code = text.charCodeAt(i);
-    
-    // Türkçe ve İngilizce i/I varyantları
-    // ı = 305 (0x131), İ = 304 (0x130), I = 73 (0x49), i = 105 (0x69)
-    if (code === 305 || code === 304 || code === 73 || code === 105) {
-      result += 'i';
-    }
-    // ğ = 287 (0x11F), Ğ = 286 (0x11E)
-    else if (code === 287 || code === 286) {
-      result += 'g';
-    }
-    // ü = 252 (0xFC), Ü = 220 (0xDC)
-    else if (code === 252 || code === 220) {
-      result += 'u';
-    }
-    // ş = 351 (0x15F), Ş = 350 (0x15E)
-    else if (code === 351 || code === 350) {
-      result += 's';
-    }
-    // ö = 246 (0xF6), Ö = 214 (0xD6)
-    else if (code === 246 || code === 214) {
-      result += 'o';
-    }
-    // ç = 231 (0xE7), Ç = 199 (0xC7)
-    else if (code === 231 || code === 199) {
-      result += 'c';
-    }
-    else {
-      result += char.toLowerCase();
-    }
+  // Türkçe karakterleri ASCII eşdeğerlerine dönüştür
+  const charMap: Record<string, string> = {
+    'ı': 'i', 'İ': 'i', 'I': 'i',
+    'ğ': 'g', 'Ğ': 'g',
+    'ü': 'u', 'Ü': 'u',
+    'ş': 's', 'Ş': 's',
+    'ö': 'o', 'Ö': 'o',
+    'ç': 'c', 'Ç': 'c',
+  };
+  
+  let result = '';
+  for (const char of normalized) {
+    result += charMap[char] || char;
   }
   
   return result;
@@ -104,46 +86,38 @@ export const generateSearchVariants = (query: string): string[] => {
     variants.push(noSpaces);
   }
   
-  // Türkçe karakter değişimleri
-  const charMap: Record<string, string[]> = {
-    'i': ['i', 'ı', 'İ', 'I'],
-    'ı': ['i', 'ı', 'İ', 'I'],
-    'İ': ['i', 'ı', 'İ', 'I'],
-    'I': ['i', 'ı', 'İ', 'I'],
-    'o': ['o', 'ö', 'O', 'Ö'],
-    'ö': ['o', 'ö', 'O', 'Ö'],
-    'O': ['o', 'ö', 'O', 'Ö'],
-    'Ö': ['o', 'ö', 'O', 'Ö'],
-    'u': ['u', 'ü', 'U', 'Ü'],
-    'ü': ['u', 'ü', 'U', 'Ü'],
-    'U': ['u', 'ü', 'U', 'Ü'],
-    'Ü': ['u', 'ü', 'U', 'Ü'],
-    's': ['s', 'ş', 'S', 'Ş'],
-    'ş': ['s', 'ş', 'S', 'Ş'],
-    'S': ['s', 'ş', 'S', 'Ş'],
-    'Ş': ['s', 'ş', 'S', 'Ş'],
-    'g': ['g', 'ğ', 'G', 'Ğ'],
-    'ğ': ['g', 'ğ', 'G', 'Ğ'],
-    'G': ['g', 'ğ', 'G', 'Ğ'],
-    'Ğ': ['g', 'ğ', 'G', 'Ğ'],
-    'c': ['c', 'ç', 'C', 'Ç'],
-    'ç': ['c', 'ç', 'C', 'Ç'],
-    'C': ['c', 'ç', 'C', 'Ç'],
-    'Ç': ['c', 'ç', 'C', 'Ç'],
+  // ASCII versiyonu (i -> i, ı -> i, ö -> o, vb.)
+  const asciiVersion = normalizeTurkish(trimmed);
+  if (asciiVersion !== trimmed.toLowerCase()) {
+    variants.push(asciiVersion);
+    // ASCII boşluksuz
+    const asciiNoSpaces = asciiVersion.replace(/\s+/g, '');
+    if (asciiNoSpaces !== asciiVersion) {
+      variants.push(asciiNoSpaces);
+    }
+  }
+  
+  // Türkçe versiyon (i -> ı, o -> ö, vb.)
+  const turkishCharMap: Record<string, string> = {
+    'i': 'ı', 'I': 'İ',
+    'o': 'ö', 'O': 'Ö',
+    'u': 'ü', 'U': 'Ü',
+    's': 'ş', 'S': 'Ş',
+    'g': 'ğ', 'G': 'Ğ',
+    'c': 'ç', 'C': 'Ç',
   };
   
-  // Ana sorgu için Türkçe versiyonunu oluştur
   let turkishVariant = '';
   for (const char of trimmed) {
-    if (charMap[char]) {
-      // İlk Türkçe karakteri al
-      turkishVariant += charMap[char].find(c => c.charCodeAt(0) > 127) || char;
-    } else {
-      turkishVariant += char;
-    }
+    turkishVariant += turkishCharMap[char] || char;
   }
   if (turkishVariant !== trimmed) {
     variants.push(turkishVariant);
+    // Türkçe boşluksuz
+    const turkishNoSpaces = turkishVariant.replace(/\s+/g, '');
+    if (turkishNoSpaces !== turkishVariant) {
+      variants.push(turkishNoSpaces);
+    }
   }
   
   return [...new Set(variants)];

@@ -7,6 +7,7 @@ interface AdminSettings {
   comments_enabled: boolean;
   favorites_enabled: boolean;
   skip_controls_enabled: boolean;
+  requests_enabled: boolean;
 }
 
 interface AdminSettingsContextType {
@@ -22,6 +23,7 @@ const defaultSettings: AdminSettings = {
   comments_enabled: true,
   favorites_enabled: true,
   skip_controls_enabled: true,
+  requests_enabled: true,
 };
 
 const AdminSettingsContext = createContext<AdminSettingsContextType | undefined>(undefined);

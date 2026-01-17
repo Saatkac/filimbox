@@ -7,11 +7,13 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useAdminSettings } from "@/hooks/useAdminSettings";
 import { Headphones, Loader2 } from "lucide-react";
 
 const SupportRequestDialog = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { settings } = useAdminSettings();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -52,7 +54,7 @@ const SupportRequestDialog = () => {
     }
   };
 
-  if (!user) return null;
+  if (!user || !settings.requests_enabled) return null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
