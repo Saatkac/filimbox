@@ -128,6 +128,8 @@ const MovieDetail = () => {
 
   useEffect(() => {
     if (id) {
+      // Scroll to top when navigating to a new movie/series
+      window.scrollTo(0, 0);
       loadContent();
     }
   }, [id, loadContent]);
