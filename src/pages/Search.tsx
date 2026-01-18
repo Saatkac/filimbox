@@ -119,10 +119,14 @@ const Search = () => {
         let allContent = [...allMovies, ...allSeries];
         
         // Client-side advanced matching for better Turkish support
+        // Include translations in the matching
+        const allSearchTerms = [trimmedQuery, ...searchVariants];
         allContent = allContent.filter(item => {
           const title = item.title || '';
           const description = item.description || '';
-          return advancedMatch(title, trimmedQuery) || advancedMatch(description, trimmedQuery);
+          return allSearchTerms.some(term => 
+            advancedMatch(title, term) || advancedMatch(description, term)
+          );
         });
         
         // Sonuçları sırala - normalize edilmiş karşılaştırma ile
