@@ -351,7 +351,8 @@ const MovieDetail = () => {
 
         <div className="container mx-auto px-4 mb-12">
           <div className="flex flex-col md:flex-row gap-8">
-            <div className="md:w-1/3">
+            {/* Hide poster on mobile */}
+            <div className="hidden md:block md:w-1/3">
               <img
                 src={content.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
                 alt={content.title}
@@ -361,7 +362,7 @@ const MovieDetail = () => {
               />
             </div>
             
-            <div className="md:w-2/3">
+            <div className="w-full md:w-2/3">
               <div className="flex items-center justify-between mb-4">
                 <h1 className="text-4xl md:text-5xl font-bold gold-glow">
                   {content.title}

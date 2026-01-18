@@ -7,7 +7,7 @@ import { Search as SearchIcon, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { categories } from "@/data/categories";
-import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars, generateSearchVariants } from "@/utils/searchUtils";
+import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars, generateSearchVariants, getTranslations } from "@/utils/searchUtils";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
@@ -74,6 +74,22 @@ const Search = () => {
         }
         if (!searchVariants.includes(queryNoSpaces)) {
           searchVariants.push(queryNoSpaces);
+        }
+        
+        // Add bilingual translations (English <-> Turkish)
+        const words = trimmedQuery.split(/\s+/);
+        for (const word of words) {
+          const translations = getTranslations(word);
+          for (const translation of translations) {
+            if (!searchVariants.includes(translation)) {
+              searchVariants.push(translation);
+            }
+            // Also add normalized version of translation
+            const normalizedTranslation = normalizeTurkish(translation);
+            if (!searchVariants.includes(normalizedTranslation)) {
+              searchVariants.push(normalizedTranslation);
+            }
+          }
         }
         
         // Build OR conditions for each variant
