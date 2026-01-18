@@ -260,24 +260,6 @@ const translationMap: Record<string, string[]> = {
   'rüzgar': ['wind'],
 };
 
-// Get translations for a word
-export const getTranslations = (word: string): string[] => {
-  const lowerWord = word.toLowerCase();
-  const normalizedWord = normalizeTurkish(lowerWord);
-  
-  // Check direct match
-  if (translationMap[lowerWord]) {
-    return translationMap[lowerWord];
-  }
-  
-  // Check normalized match
-  if (translationMap[normalizedWord]) {
-    return translationMap[normalizedWord];
-  }
-  
-  return [];
-};
-
 // Türkçe karakterleri normalize et
 export const normalizeTurkish = (text: string): string => {
   if (!text) return '';
@@ -301,6 +283,24 @@ export const normalizeTurkish = (text: string): string => {
   }
   
   return result;
+};
+
+// Get translations for a word
+export const getTranslations = (word: string): string[] => {
+  const lowerWord = word.toLowerCase();
+  const normalizedWord = normalizeTurkish(lowerWord);
+  
+  // Check direct match
+  if (translationMap[lowerWord]) {
+    return translationMap[lowerWord];
+  }
+  
+  // Check normalized match
+  if (translationMap[normalizedWord]) {
+    return translationMap[normalizedWord];
+  }
+  
+  return [];
 };
 
 // Boşlukları ve özel karakterleri kaldır
