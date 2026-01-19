@@ -53,6 +53,7 @@ interface VideoPlayerProps {
   showQualitySelector?: boolean;
   showPlaybackSpeed?: boolean;
   showSkipControls?: boolean;
+  useProxy?: boolean;
 }
 
 export interface VideoPlayerRef {
@@ -72,7 +73,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   onPlayingChange,
   showQualitySelector = true,
   showPlaybackSpeed = true,
-  showSkipControls = true
+  showSkipControls = true,
+  useProxy = false
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,6 +133,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   useEffect(() => {
     onPlayingChange?.(isPlaying);
   }, [isPlaying, onPlayingChange]);
+
+  // Proxy URL builder
+  const getProxyUrl = useCallback((url: string): string => {
+    if (!useProxy) return url;
+    const proxyBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hls-proxy`;
+    return `${proxyBase}?url=${encodeURIComponent(url)}`;
+  }, [useProxy]);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;
@@ -222,8 +231,10 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     
     if (isDirectVideo) {
       console.log('[VideoPlayer] Direct video file detected:', cleanSrc);
-      // Direct video playback (including MKV, AVI, etc.)
-      videoElement.src = cleanSrc;
+      // Direct video playback (including MKV, AVI, etc.) - use proxy if enabled
+      const videoUrl = useProxy ? getProxyUrl(cleanSrc) : cleanSrc;
+      console.log('[VideoPlayer] Using video URL:', videoUrl);
+      videoElement.src = videoUrl;
       
       const handleLoadedMetadata = () => {
         console.log('[VideoPlayer] Direct video loaded, duration:', videoElement.duration);
@@ -288,7 +299,10 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       });
 
       hlsRef.current = hls;
-      hls.loadSource(cleanSrc);
+      // Use proxy URL if enabled
+      const hlsUrl = useProxy ? getProxyUrl(cleanSrc) : cleanSrc;
+      console.log('[VideoPlayer] Loading HLS from:', hlsUrl);
+      hls.loadSource(hlsUrl);
       hls.attachMedia(videoElement);
 
       hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
@@ -421,7 +435,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       });
 
     } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-      videoElement.src = cleanSrc;
+      // Safari native HLS - use proxy if enabled
+      const hlsUrl = useProxy ? getProxyUrl(cleanSrc) : cleanSrc;
+      videoElement.src = hlsUrl;
       setIsReady(true);
     }
 
@@ -496,7 +512,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         hlsRef.current.destroy();
       }
     };
-  }, [src, initialProgress]);
+  }, [src, initialProgress, useProxy, getProxyUrl]);
 
   const skipTime = (seconds: number) => {
     if (videoRef.current) {

@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Video, MessageSquare, Heart, Gauge, SkipForward, Headphones } from 'lucide-react';
+import { Settings, Video, MessageSquare, Heart, Gauge, SkipForward, Headphones, Server } from 'lucide-react';
 
 const settingsConfig = [
   {
@@ -41,6 +41,12 @@ const settingsConfig = [
     label: 'Film/Dizi Talepleri',
     description: 'Kullanıcıların film/dizi talebinde bulunmasına izin ver',
     icon: Headphones,
+  },
+  {
+    key: 'proxy_enabled' as const,
+    label: 'Video Proxy',
+    description: 'Video akışı için sunucu tarafı proxy kullan (CORS ve Referer sorunlarını çözer)',
+    icon: Server,
   },
 ];
 

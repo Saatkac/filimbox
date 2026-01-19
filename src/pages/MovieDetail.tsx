@@ -315,6 +315,7 @@ const MovieDetail = () => {
                 showQualitySelector={settings.quality_selector_enabled}
                 showPlaybackSpeed={settings.playback_speed_enabled}
                 showSkipControls={settings.skip_controls_enabled}
+                useProxy={settings.proxy_enabled}
                 onProgressUpdate={(current, duration) => {
                   saveWatchProgress(current, duration);
                 }}
@@ -340,6 +341,7 @@ const MovieDetail = () => {
               showQualitySelector={settings.quality_selector_enabled}
               showPlaybackSpeed={settings.playback_speed_enabled}
               showSkipControls={settings.skip_controls_enabled}
+              useProxy={settings.proxy_enabled}
               onProgressUpdate={(current, duration) => {
                 saveWatchProgress(current, duration);
               }}
