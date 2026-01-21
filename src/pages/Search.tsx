@@ -7,7 +7,7 @@ import { Search as SearchIcon, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { categories } from "@/data/categories";
-import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars, generateSearchVariants, getTranslations } from "@/utils/searchUtils";
+import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars, generateSearchVariants, getTranslations, fuzzyMatch } from "@/utils/searchUtils";
 
 const Search = () => {
   const [searchParams] = useSearchParams();
@@ -119,14 +119,21 @@ const Search = () => {
         let allContent = [...allMovies, ...allSeries];
         
         // Client-side advanced matching for better Turkish support
-        // Include translations in the matching
+        // Include translations and fuzzy matching for typo tolerance
         const allSearchTerms = [trimmedQuery, ...searchVariants];
         allContent = allContent.filter(item => {
           const title = item.title || '';
           const description = item.description || '';
-          return allSearchTerms.some(term => 
+          
+          // First check exact and advanced matches
+          const hasAdvancedMatch = allSearchTerms.some(term => 
             advancedMatch(title, term) || advancedMatch(description, term)
           );
+          
+          if (hasAdvancedMatch) return true;
+          
+          // If no exact match, try fuzzy matching (typo tolerance)
+          return fuzzyMatch(title, trimmedQuery);
         });
         
         // Sonuçları sırala - normalize edilmiş karşılaştırma ile
