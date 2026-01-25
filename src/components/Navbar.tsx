@@ -2,7 +2,7 @@ import { Search, Film, LogIn, UserCircle, Shield, Heart, Settings, Menu, X, Home
 import { Link, useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DropdownMenu,
@@ -18,43 +18,9 @@ const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const { user, isAdmin } = useAuth();
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Anlık arama - debounce ile
-  const performSearch = useCallback((query: string) => {
-    if (query.trim().length >= 2) {
-      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
-    }
-  }, [navigate]);
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchQuery(value);
-    
-    // Debounce: 300ms sonra ara
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-    
-    debounceRef.current = setTimeout(() => {
-      performSearch(value);
-    }, 300);
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-      }
-    };
-  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
       setMobileSearchOpen(false);
@@ -90,7 +56,7 @@ const Navbar = () => {
               placeholder="Film veya dizi ara..."
               className="pl-10 bg-secondary border-border focus:border-gold text-sm"
               value={searchQuery}
-              onChange={handleSearchChange}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </form>
 
@@ -174,7 +140,7 @@ const Navbar = () => {
                 placeholder="Film veya dizi ara..."
                 className="pl-10 bg-secondary border-border focus:border-gold w-full"
                 value={searchQuery}
-                onChange={handleSearchChange}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
               />
             </div>
