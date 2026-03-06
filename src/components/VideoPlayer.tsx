@@ -455,7 +455,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     const handleLoadedMetadata = () => {
       if (videoElement) {
         setDuration(videoElement.duration);
-        selectTurkish(hlsRef.current!);
+        if (hlsRef.current) {
+          selectTurkish(hlsRef.current);
+        }
       }
     };
 
