@@ -734,7 +734,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
             ref={videoRef}
             poster={poster}
             className="w-full h-full max-h-[100vh] object-contain"
-            crossOrigin="anonymous"
+            crossOrigin={useProxy ? "anonymous" : undefined}
             preload="auto"
             playsInline
             onClick={togglePlay}
