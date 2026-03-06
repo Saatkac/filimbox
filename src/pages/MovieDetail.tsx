@@ -361,7 +361,6 @@ const MovieDetail = () => {
                 src={content.poster_url || "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=400&h=600&fit=crop"}
                 alt={content.title}
                 loading="eager"
-                fetchPriority="high"
                 className="w-full rounded-lg shadow-2xl"
               />
             </div>

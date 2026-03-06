@@ -30,7 +30,7 @@ const FeaturedContentManager = ({ onUpdate }: FeaturedContentManagerProps) => {
     const { data: featured } = await supabase
       .from("featured_content")
       .select("*, movies(*), series(*)")
-      .single();
+      .maybeSingle();
 
     if (featured) {
       setCurrentFeatured(featured);
