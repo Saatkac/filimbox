@@ -93,7 +93,7 @@ const Index = () => {
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, page, loadContent]);
 
-  const allContent = useMemo(() => movies, [movies]);
+  const allContent = useMemo(() => [...movies, ...series], [movies, series]);
   
   const filteredContent = useMemo(() => allContent, [allContent]);
 
