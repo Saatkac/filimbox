@@ -710,9 +710,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       onMouseLeave={() => setShowControls(false)}
       onTouchStart={() => {
         setShowControls(true);
-        if (controlsTimeout) clearTimeout(controlsTimeout);
-        const timeout = setTimeout(() => setShowControls(false), 3000);
-        setControlsTimeout(timeout);
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
       }}
       tabIndex={0}
     >
