@@ -149,7 +149,7 @@ const Index = () => {
               <Button 
                 size="default"
                 className="bg-gold hover:bg-gold-light text-black font-semibold w-full sm:w-auto touch-manipulation active:scale-95 transition-transform"
-                onClick={() => window.location.href = `/movie/${featuredContent.id}`}
+                onClick={() => navigate(`/movie/${featuredContent.id}`)}
               >
                 <Play className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 Şimdi İzle
