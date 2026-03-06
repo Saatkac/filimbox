@@ -21,7 +21,7 @@ const Index = () => {
     const { data: featured } = await supabase
       .from("featured_content")
       .select("*, movies(*), series(*)")
-      .single();
+      .maybeSingle();
 
     if (featured?.movies) {
       setFeaturedContent(featured.movies);
