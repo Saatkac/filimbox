@@ -601,14 +601,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
-    if (controlsTimeout) {
-      clearTimeout(controlsTimeout);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
     }
-    const timeout = setTimeout(() => {
+    controlsTimeoutRef.current = setTimeout(() => {
       setShowControls(false);
     }, 3000);
-    setControlsTimeout(timeout);
-  }, [controlsTimeout]);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
