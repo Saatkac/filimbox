@@ -621,8 +621,16 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         document.exitFullscreen();
       }
     }
-    setIsFullscreen(!isFullscreen);
   }, [isFullscreen]);
+
+  // Sync fullscreen state with browser
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Keyboard controls - works in fullscreen too
   useEffect(() => {

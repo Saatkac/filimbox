@@ -4,9 +4,6 @@ import Navbar from "@/components/Navbar";
 import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
 import { Search as SearchIcon, Loader2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { categories } from "@/data/categories";
 import { advancedMatch, normalizeTurkish, removeSpacesAndSpecialChars, generateSearchVariants, getTranslations } from "@/utils/searchUtils";
 
 const Search = () => {
