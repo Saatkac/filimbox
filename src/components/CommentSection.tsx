@@ -71,7 +71,7 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
       query.eq("series_id", seriesId);
     }
 
-    const { data: commentsData, error } = await query;
+    const { data: commentsData, error } = await query.order("created_at", { ascending: false });
 
     if (!error && commentsData) {
       const userIds = [...new Set(commentsData.map(c => c.user_id))];

@@ -132,7 +132,7 @@ const Auth = () => {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-4">
             <Film className="w-10 h-10 text-gold" />
-            <h1 className="text-3xl font-bold text-gold gold-glow">FilmBox</h1>
+            <h1 className="text-3xl font-bold text-gold gold-glow">FilimBox</h1>
           </div>
           <p className="text-muted-foreground">
             {isLogin ? "Hesabınıza giriş yapın" : "Yeni hesap oluşturun"}

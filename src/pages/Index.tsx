@@ -4,8 +4,10 @@ import MovieCard from "@/components/MovieCard";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Play, TrendingUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
+  const navigate = useNavigate();
   const [movies, setMovies] = useState<any[]>([]);
   const [series, setSeries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +23,7 @@ const Index = () => {
     const { data: featured } = await supabase
       .from("featured_content")
       .select("*, movies(*), series(*)")
-      .single();
+      .maybeSingle();
 
     if (featured?.movies) {
       setFeaturedContent(featured.movies);
@@ -93,7 +95,7 @@ const Index = () => {
     return () => observer.disconnect();
   }, [hasMore, loading, loadingMore, page, loadContent]);
 
-  const allContent = useMemo(() => movies, [movies]);
+  const allContent = useMemo(() => [...movies, ...series], [movies, series]);
   
   const filteredContent = useMemo(() => allContent, [allContent]);
 
@@ -149,7 +151,7 @@ const Index = () => {
               <Button 
                 size="default"
                 className="bg-gold hover:bg-gold-light text-black font-semibold w-full sm:w-auto touch-manipulation active:scale-95 transition-transform"
-                onClick={() => window.location.href = `/movie/${featuredContent.id}`}
+                onClick={() => navigate(`/movie/${featuredContent.id}`)}
               >
                 <Play className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 Şimdi İzle
@@ -161,7 +163,7 @@ const Index = () => {
 
 
       <section className="container mx-auto px-3 sm:px-4 pb-16 pt-4 sm:pt-0">
-        <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Tüm Filmler</h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Tüm İçerikler</h2>
         {filteredContent.length > 0 ? (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4 md:gap-6">

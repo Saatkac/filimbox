@@ -18,8 +18,8 @@ const Categories = () => {
   const loadContent = async () => {
     setLoading(true);
     const [moviesData, seriesData] = await Promise.all([
-      supabase.from("movies").select("*"),
-      supabase.from("series").select("*"),
+      supabase.from("movies").select("*").limit(2000),
+      supabase.from("series").select("*").limit(2000),
     ]);
     
     setMovies(moviesData.data || []);

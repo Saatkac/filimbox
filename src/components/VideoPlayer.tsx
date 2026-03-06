@@ -90,7 +90,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isReady, setIsReady] = useState(false);
   const [isBuffering, setIsBuffering] = useState(false);
-  const [controlsTimeout, setControlsTimeout] = useState<NodeJS.Timeout | null>(null);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const progressUpdateInterval = useRef<NodeJS.Timeout | null>(null);
@@ -455,7 +455,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     const handleLoadedMetadata = () => {
       if (videoElement) {
         setDuration(videoElement.duration);
-        selectTurkish(hlsRef.current!);
+        if (hlsRef.current) {
+          selectTurkish(hlsRef.current);
+        }
       }
     };
 
@@ -599,14 +601,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
 
   const handleMouseMove = useCallback(() => {
     setShowControls(true);
-    if (controlsTimeout) {
-      clearTimeout(controlsTimeout);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
     }
-    const timeout = setTimeout(() => {
+    controlsTimeoutRef.current = setTimeout(() => {
       setShowControls(false);
     }, 3000);
-    setControlsTimeout(timeout);
-  }, [controlsTimeout]);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
@@ -620,8 +621,16 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         document.exitFullscreen();
       }
     }
-    setIsFullscreen(!isFullscreen);
   }, [isFullscreen]);
+
+  // Sync fullscreen state with browser
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Keyboard controls - works in fullscreen too
   useEffect(() => {
@@ -709,9 +718,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       onMouseLeave={() => setShowControls(false)}
       onTouchStart={() => {
         setShowControls(true);
-        if (controlsTimeout) clearTimeout(controlsTimeout);
-        const timeout = setTimeout(() => setShowControls(false), 3000);
-        setControlsTimeout(timeout);
+        if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+        controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000);
       }}
       tabIndex={0}
     >
