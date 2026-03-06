@@ -111,7 +111,7 @@ const Auth = () => {
         } else {
           toast({
             title: "Başarılı",
-            description: "Hesap oluşturuldu ve giriş yapıldı",
+            description: "Hesap oluşturuldu. Lütfen e-postanızı kontrol edin ve hesabınızı doğrulayın.",
           });
         }
       }

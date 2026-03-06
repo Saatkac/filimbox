@@ -71,7 +71,7 @@ const Index = () => {
       setSeries(prev => [...prev, ...newSeries]);
     }
     
-    setHasMore(newMovies.length === ITEMS_PER_PAGE);
+    setHasMore(newMovies.length === ITEMS_PER_PAGE || newSeries.length === ITEMS_PER_PAGE);
     if (pageNum === 1) setLoading(false); else setLoadingMore(false);
   }, []);
 

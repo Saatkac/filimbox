@@ -40,8 +40,8 @@ const CommentSection = ({ movieId, seriesId }: CommentSectionProps) => {
 
   useEffect(() => {
     loadComments();
-    checkAdmin();
-  }, [movieId, seriesId]);
+    if (user) checkAdmin();
+  }, [movieId, seriesId, user]);
 
   const checkAdmin = async () => {
     if (!user) return;

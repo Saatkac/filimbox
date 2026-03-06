@@ -92,8 +92,7 @@ const AccountSettings = () => {
   };
 
   if (!user) {
-    navigate("/auth");
-    return null;
+    return <Navigate to="/auth" replace />;
   }
 
   return (
