@@ -16,6 +16,7 @@ import { parseM3U } from "@/utils/m3uParser";
 import MovieCard from "@/components/MovieCard";
 import AdminChat from "@/components/AdminChat";
 import AdminSettings from "@/components/AdminSettings";
+import AdminProxySettings from "@/components/AdminProxySettings";
 import FeaturedContentManager from "@/components/FeaturedContentManager";
 import AdminSupportRequests from "@/components/AdminSupportRequests";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
