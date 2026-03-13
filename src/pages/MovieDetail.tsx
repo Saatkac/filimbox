@@ -26,7 +26,7 @@ interface Episode {
 const MovieDetail = () => {
   const { id } = useParams();
   const { user } = useAuth();
-  const { settings } = useAdminSettings();
+  const { settings, textSettings } = useAdminSettings();
   const { toast } = useToast();
   const [content, setContent] = useState<any>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -262,6 +262,17 @@ const MovieDetail = () => {
     [isMovie, content?.video_url, selectedEpisode, episodes]
   );
 
+  // Compute proxy settings
+  const proxyEnabled = textSettings.proxy_method !== 'disabled';
+  const proxyCustomUrl = useMemo(() => {
+    switch (textSettings.proxy_method) {
+      case 'custom_php': return textSettings.proxy_custom_php_url;
+      case 'custom_node': return textSettings.proxy_custom_node_url;
+      case 'cloudflare_worker': return textSettings.proxy_cloudflare_worker_url;
+      default: return '';
+    }
+  }, [textSettings]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-cinema-dark">
@@ -315,7 +326,9 @@ const MovieDetail = () => {
                 showQualitySelector={settings.quality_selector_enabled}
                 showPlaybackSpeed={settings.playback_speed_enabled}
                 showSkipControls={settings.skip_controls_enabled}
-                useProxy={settings.proxy_enabled}
+                useProxy={proxyEnabled}
+                proxyMethod={textSettings.proxy_method}
+                proxyCustomUrl={proxyCustomUrl}
                 onProgressUpdate={(current, duration) => {
                   saveWatchProgress(current, duration);
                 }}
@@ -341,7 +354,9 @@ const MovieDetail = () => {
               showQualitySelector={settings.quality_selector_enabled}
               showPlaybackSpeed={settings.playback_speed_enabled}
               showSkipControls={settings.skip_controls_enabled}
-              useProxy={settings.proxy_enabled}
+              useProxy={proxyEnabled}
+              proxyMethod={textSettings.proxy_method}
+              proxyCustomUrl={proxyCustomUrl}
               onProgressUpdate={(current, duration) => {
                 saveWatchProgress(current, duration);
               }}

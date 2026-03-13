@@ -14,7 +14,7 @@ const AccountSettings = () => {
   const [username, setUsername] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("https://www.hdfilmizle.life/assets/front/img/default-pp.webp");
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
@@ -90,6 +90,17 @@ const AccountSettings = () => {
     await supabase.auth.signOut();
     navigate("/");
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-cinema-dark">
+        <Navbar />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-gold text-xl">Yükleniyor...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/auth" replace />;
