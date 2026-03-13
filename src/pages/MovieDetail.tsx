@@ -262,6 +262,17 @@ const MovieDetail = () => {
     [isMovie, content?.video_url, selectedEpisode, episodes]
   );
 
+  // Compute proxy settings
+  const proxyEnabled = textSettings.proxy_method !== 'disabled';
+  const proxyCustomUrl = useMemo(() => {
+    switch (textSettings.proxy_method) {
+      case 'custom_php': return textSettings.proxy_custom_php_url;
+      case 'custom_node': return textSettings.proxy_custom_node_url;
+      case 'cloudflare_worker': return textSettings.proxy_cloudflare_worker_url;
+      default: return '';
+    }
+  }, [textSettings]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-cinema-dark">
