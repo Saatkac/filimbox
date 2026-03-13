@@ -26,7 +26,7 @@ interface Episode {
 const MovieDetail = () => {
   const { id } = useParams();
   const { user } = useAuth();
-  const { settings } = useAdminSettings();
+  const { settings, textSettings } = useAdminSettings();
   const { toast } = useToast();
   const [content, setContent] = useState<any>(null);
   const [episodes, setEpisodes] = useState<Episode[]>([]);
