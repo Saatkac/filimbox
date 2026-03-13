@@ -138,12 +138,31 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
     onPlayingChange?.(isPlaying);
   }, [isPlaying, onPlayingChange]);
 
-  // Proxy URL builder
+  // Proxy URL builder - supports multiple methods
   const getProxyUrl = useCallback((url: string): string => {
     if (!useProxy) return url;
-    const proxyBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hls-proxy`;
-    return `${proxyBase}?url=${encodeURIComponent(url)}`;
-  }, [useProxy]);
+    
+    switch (proxyMethod) {
+      case 'builtin': {
+        const proxyBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/hls-proxy`;
+        return `${proxyBase}?url=${encodeURIComponent(url)}`;
+      }
+      case 'custom_php':
+      case 'custom_node':
+      case 'cloudflare_worker': {
+        if (!proxyCustomUrl) return url;
+        // If URL ends with = or ?url=, append the video URL directly
+        if (proxyCustomUrl.endsWith('=')) {
+          return `${proxyCustomUrl}${encodeURIComponent(url)}`;
+        }
+        // Otherwise append as query parameter
+        const separator = proxyCustomUrl.includes('?') ? '&' : '?';
+        return `${proxyCustomUrl}${separator}url=${encodeURIComponent(url)}`;
+      }
+      default:
+        return url;
+    }
+  }, [useProxy, proxyMethod, proxyCustomUrl]);
 
   const normalizeUrl = (u: string) => {
     if (!u) return u;

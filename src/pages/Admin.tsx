@@ -491,8 +491,9 @@ const Admin = () => {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="settings">
+          <TabsContent value="settings" className="space-y-6">
             <AdminSettings />
+            <AdminProxySettings />
           </TabsContent>
 
           <TabsContent value="featured">
