@@ -290,11 +290,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
       };
       
     } else if (Hls.isSupported()) {
+      // For custom proxies (PHP/Node/CF), we need to proxy ALL requests (manifests + segments)
+      // The builtin proxy rewrites M3U8 URLs server-side, but custom proxies don't
+      const needsClientSideProxying = useProxy && proxyMethod !== 'builtin' && proxyMethod !== 'disabled';
+      
       const hls = new Hls({
         debug: false,
         enableWorker: true,
         lowLatencyMode: false,
-        // Optimized buffer settings for smoother playback
         backBufferLength: 60,
         maxBufferLength: 60,
         maxMaxBufferLength: 120,
@@ -302,7 +305,6 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         maxBufferHole: 0.3,
         highBufferWatchdogPeriod: 3,
         nudgeMaxRetry: 10,
-        // Better fragment loading
         fragLoadingTimeOut: 30000,
         fragLoadingMaxRetry: 6,
         fragLoadingRetryDelay: 1000,
@@ -310,19 +312,25 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(({
         manifestLoadingMaxRetry: 4,
         levelLoadingTimeOut: 20000,
         levelLoadingMaxRetry: 4,
-        // Optimize for mobile
         startLevel: -1,
         abrEwmaDefaultEstimate: 500000,
         abrBandWidthFactor: 0.95,
         abrBandWidthUpFactor: 0.7,
-        xhrSetup: (xhr) => {
+        xhrSetup: (xhr, url) => {
           xhr.withCredentials = false;
           xhr.timeout = 30000;
+          // For custom proxies, rewrite every XHR URL (segments, child manifests) through the proxy
+          if (needsClientSideProxying && url && !url.includes('proxy') && !url.startsWith('blob:')) {
+            const proxiedUrl = getProxyUrl(url);
+            console.log('[VideoPlayer] Proxying segment/manifest:', url.substring(0, 80));
+            xhr.open('GET', proxiedUrl, true);
+          }
         }
       });
 
       hlsRef.current = hls;
-      // Use proxy URL if enabled
+      // For builtin proxy, proxy the initial manifest (edge function rewrites child URLs)
+      // For custom proxies, load the original URL - xhrSetup will proxy each request
       const hlsUrl = useProxy ? getProxyUrl(cleanSrc) : cleanSrc;
       console.log('[VideoPlayer] Loading HLS from:', hlsUrl);
       hls.loadSource(hlsUrl);
