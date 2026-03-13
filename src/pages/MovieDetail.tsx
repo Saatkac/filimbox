@@ -354,7 +354,9 @@ const MovieDetail = () => {
               showQualitySelector={settings.quality_selector_enabled}
               showPlaybackSpeed={settings.playback_speed_enabled}
               showSkipControls={settings.skip_controls_enabled}
-              useProxy={settings.proxy_enabled}
+              useProxy={proxyEnabled}
+              proxyMethod={textSettings.proxy_method}
+              proxyCustomUrl={proxyCustomUrl}
               onProgressUpdate={(current, duration) => {
                 saveWatchProgress(current, duration);
               }}
