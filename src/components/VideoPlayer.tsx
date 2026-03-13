@@ -54,6 +54,8 @@ interface VideoPlayerProps {
   showPlaybackSpeed?: boolean;
   showSkipControls?: boolean;
   useProxy?: boolean;
+  proxyMethod?: string;
+  proxyCustomUrl?: string;
 }
 
 export interface VideoPlayerRef {
