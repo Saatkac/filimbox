@@ -91,6 +91,17 @@ const AccountSettings = () => {
     navigate("/");
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-cinema-dark">
+        <Navbar />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-gold text-xl">Yükleniyor...</div>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
