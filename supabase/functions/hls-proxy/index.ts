@@ -154,19 +154,35 @@ serve(async (req: Request) => {
                    /\.m3u8(\?|$)/i.test(sourceUrl);
 
     if (isM3U8 && req.method === 'GET') {
-      // Rewrite M3U8 manifest
+      // Read upstream as text
       const text = await upstream.text();
+
+      // Verify it's actually a valid M3U8 manifest (must start with #EXTM3U)
+      // Otherwise upstream returned an error page (HTML) — pass it through as-is so we don't
+      // garble error responses by treating HTML lines as segment URLs.
+      const trimmed = text.trimStart();
+      if (!trimmed.startsWith('#EXTM3U')) {
+        console.warn(`[Proxy] Expected M3U8 but got non-manifest content (status ${upstream.status}). First 120 chars: ${trimmed.substring(0, 120)}`);
+        return new Response(text, {
+          status: upstream.status >= 400 ? upstream.status : 502,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': contentType || 'text/plain; charset=utf-8',
+            'X-Proxy-Error': 'upstream-not-m3u8',
+          },
+        });
+      }
+
       const body = rewriteM3U8(text, sourceUrl, proxyBase);
-      
       console.log(`[Proxy] Rewrote M3U8 manifest, ${text.length} -> ${body.length} bytes`);
-      
-      return new Response(body, { 
-        status: upstream.status, 
+
+      return new Response(body, {
+        status: upstream.status,
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
-        }
+        },
       });
     }
 
