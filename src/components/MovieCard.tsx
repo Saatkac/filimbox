@@ -18,8 +18,13 @@ const MovieCard = ({ id, title, poster, rating, year, category, duration }: Movi
   const [imageError, setImageError] = useState(false);
 
   return (
-    <Link to={`/movie/${id}`} className="group block touch-manipulation">
+    <Link
+      to={`/movie/${id}`}
+      className="group block touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold rounded-lg"
+      aria-label={`${title} — ${year || ""} ${category || ""}`.trim()}
+    >
       <div className="relative overflow-hidden rounded-lg bg-card hover-lift active:scale-[0.98] transition-transform">
+
         <div className="aspect-[2/3] relative bg-muted">
           {!imageLoaded && !imageError && (
             <div className="absolute inset-0 bg-muted animate-pulse" />
