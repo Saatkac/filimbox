@@ -51,7 +51,7 @@ const Favorites = () => {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-cinema-dark">
+      <div className="min-h-dvh bg-cinema-dark">
         <Navbar />
         <div className="container mx-auto px-4 pt-32 text-center">
           <h1 className="text-3xl font-bold mb-4">Favorilerinizi görmek için giriş yapın</h1>
@@ -64,7 +64,7 @@ const Favorites = () => {
   }
 
   return (
-    <div className="min-h-screen bg-cinema-dark">
+    <div className="min-h-dvh bg-cinema-dark">
       <Navbar />
       <div className="container mx-auto px-4 pt-32 pb-16">
         <div className="flex items-center gap-3 mb-8">

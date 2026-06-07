@@ -62,7 +62,7 @@ const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps)
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-cinema-dark flex items-center justify-center">
+      <div className="min-h-dvh bg-cinema-dark flex items-center justify-center">
         <div className="text-gold text-xl">Yükleniyor...</div>
       </div>
     );

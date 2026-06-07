@@ -93,9 +93,9 @@ const AccountSettings = () => {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-cinema-dark">
+      <div className="min-h-dvh bg-cinema-dark">
         <Navbar />
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center justify-center min-h-dvh">
           <div className="text-gold text-xl">Yükleniyor...</div>
         </div>
       </div>
@@ -107,7 +107,7 @@ const AccountSettings = () => {
   }
 
   return (
-    <div className="min-h-screen bg-cinema-dark">
+    <div className="min-h-dvh bg-cinema-dark">
       <Navbar />
       <div className="container mx-auto px-4 pt-24 pb-16 max-w-2xl">
         <div className="flex items-center gap-3 mb-8">
