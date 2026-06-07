@@ -65,10 +65,13 @@ const Navbar = () => {
             {/* Mobile Search Toggle */}
             <button
               onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-              className="sm:hidden p-2 text-foreground hover:text-gold transition-colors touch-manipulation"
+              className="sm:hidden p-2 min-h-11 min-w-11 text-foreground hover:text-gold transition-colors touch-manipulation"
+              aria-label={mobileSearchOpen ? "Aramayı kapat" : "Arama aç"}
+              aria-expanded={mobileSearchOpen}
             >
-              <Search className="w-5 h-5" />
+              <Search className="w-5 h-5" aria-hidden="true" />
             </button>
+
 
             {user ? (
               <>
@@ -86,10 +89,11 @@ const Navbar = () => {
                 <SupportRequestDialog />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="focus:outline-none touch-manipulation">
-                      <UserCircle className="w-6 h-6 text-gold hover:text-gold-light transition-colors cursor-pointer" />
+                    <button className="focus:outline-none focus-visible:ring-2 focus-visible:ring-gold rounded-full touch-manipulation min-h-11 min-w-11 flex items-center justify-center" aria-label="Hesap menüsü">
+                      <UserCircle className="w-6 h-6 text-gold hover:text-gold-light transition-colors cursor-pointer" aria-hidden="true" />
                     </button>
                   </DropdownMenuTrigger>
+
                   <DropdownMenuContent align="end" className="bg-card border-border">
                     {isAdmin && (
                       <DropdownMenuItem onClick={() => navigate("/admin")} className="cursor-pointer sm:hidden">
@@ -123,10 +127,13 @@ const Navbar = () => {
             {/* Mobile Menu Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-foreground hover:text-gold transition-colors touch-manipulation"
+              className="md:hidden p-2 min-h-11 min-w-11 text-foreground hover:text-gold transition-colors touch-manipulation"
+              aria-label={mobileMenuOpen ? "Menüyü kapat" : "Menüyü aç"}
+              aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
             </button>
+
           </div>
         </div>
 
