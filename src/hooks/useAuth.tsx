@@ -32,6 +32,7 @@ export const useAuth = () => {
       
       if (session?.user) {
         setTimeout(() => {
+          ensureProfile(session.user.id);
           checkAdminStatus(session.user.id);
         }, 0);
       } else {
