@@ -41,6 +41,26 @@ export const useAuth = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const ensureProfile = async (userId: string) => {
+    try {
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!existing) {
+        await supabase.from("profiles").insert({
+          user_id: userId,
+          username: "",
+          avatar_url: "",
+        });
+      }
+    } catch {
+      // Profil oluşturma hatası sessizce yutulur (kritik değil)
+    }
+  };
+
   const checkAdminStatus = async (userId: string) => {
     try {
       const { data, error } = await supabase
