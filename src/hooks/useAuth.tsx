@@ -52,9 +52,11 @@ export const useAuth = () => {
         .maybeSingle();
 
       if (!existing) {
+        // Benzersiz username üret (boş string unique çakışmasını önler)
+        const uniqueUsername = `user_${userId.replace(/-/g, "").slice(0, 12)}`;
         await supabase.from("profiles").insert({
           user_id: userId,
-          username: "",
+          username: uniqueUsername,
           avatar_url: "",
         });
       }
