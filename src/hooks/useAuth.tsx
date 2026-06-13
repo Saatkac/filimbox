@@ -16,6 +16,7 @@ export const useAuth = () => {
       
       if (session?.user) {
         setTimeout(() => {
+          ensureProfile(session.user.id);
           checkAdminStatus(session.user.id);
         }, 0);
       } else {
@@ -31,6 +32,7 @@ export const useAuth = () => {
       
       if (session?.user) {
         setTimeout(() => {
+          ensureProfile(session.user.id);
           checkAdminStatus(session.user.id);
         }, 0);
       } else {
@@ -40,6 +42,26 @@ export const useAuth = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const ensureProfile = async (userId: string) => {
+    try {
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (!existing) {
+        await supabase.from("profiles").insert({
+          user_id: userId,
+          username: "",
+          avatar_url: "",
+        });
+      }
+    } catch {
+      // Profil oluşturma hatası sessizce yutulur (kritik değil)
+    }
+  };
 
   const checkAdminStatus = async (userId: string) => {
     try {
