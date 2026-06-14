@@ -52,18 +52,20 @@ export const useAuth = () => {
         .maybeSingle();
 
       if (!existing) {
-        // Benzersiz username üret (boş string unique çakışmasını önler)
-        const uniqueUsername = `user_${userId.replace(/-/g, "").slice(0, 12)}`;
+        const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+        const uniqueUsername = `user_${rand}`;
         await supabase.from("profiles").insert({
           user_id: userId,
           username: uniqueUsername,
-          avatar_url: "",
+          avatar_url:
+            "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTubq_1Ec8ya2q1ihaTWobDRzSOoPkhSwpkICgfYvtVHg&s=10",
         });
       }
     } catch {
       // Profil oluşturma hatası sessizce yutulur (kritik değil)
     }
   };
+
 
   const checkAdminStatus = async (userId: string) => {
     try {
